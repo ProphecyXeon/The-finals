@@ -145,7 +145,7 @@ bot = MyBot()
 
 def get_player_data(player_name):
     clean_name = re.sub(r'#\d+', '', player_name).strip()
-    url = f"https://api.the-finals-leaderboard.com/v1/leaderboard/s5/crossplay?name={clean_name}"
+    url = f"https://api.the-finals-leaderboard.com/v1/leaderboard/s6/crossplay?name={clean_name}"
     print(f"🔍 API-Request: {url}")
     response = requests.get(url)
     if response.status_code == 200:
