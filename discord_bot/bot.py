@@ -131,7 +131,22 @@ class MyBot(discord.Client):
         self.tree = app_commands.CommandTree(self)
 
     async def on_ready(self):
-        await self.tree.clear_commands(guild=discord.Object(id=GUILD_ID))
+        self.tree.clear_commands(guild=discord.Object(id=GUILD_ID))
+
+        @self.tree.command(name="rank", description="Zeigt dein aktuelles The Finals Ranking an")
+        @app_commands.describe(name="Dein Spielername")
+        async def rank(interaction: discord.Interaction, name: str):
+            player_data = get_player_data(name)
+            if not player_data:
+                await interaction.response.send_message("❌ Spieler nicht gefunden.")
+                return
+            league = player_data.get("league", "Unbekannt")
+            await interaction.response.send_message(f"🏆 **{name}** ist in der Liga: **{league}**.")
+
+        @self.tree.command(name="debug", description="Testet ob der Bot richtig läuft")
+        async def debug(interaction: discord.Interaction):
+            await interaction.response.send_message("✅ Der Bot läuft einwandfrei!")
+
         await self.tree.sync(guild=discord.Object(id=GUILD_ID))
         print(f"✅ Bot ist online als {self.user}")
         channel = self.get_channel(VERIFY_CHANNEL_ID)
@@ -143,21 +158,6 @@ class MyBot(discord.Client):
             )
 
 bot = MyBot()
-
-@bot.tree.command(name="rank", description="Zeigt dein aktuelles The Finals Ranking an")
-@app_commands.describe(name="Dein Spielername")
-async def rank(interaction: discord.Interaction, name: str):
-    player_data = get_player_data(name)
-    if not player_data:
-        await interaction.response.send_message("❌ Spieler nicht gefunden.")
-        return
-
-    league = player_data.get("league", "Unbekannt")
-    await interaction.response.send_message(f"🏆 **{name}** ist in der Liga: **{league}**.")
-
-@bot.tree.command(name="debug", description="Testet ob der Bot richtig läuft")
-async def debug(interaction: discord.Interaction):
-    await interaction.response.send_message("✅ Der Bot läuft einwandfrei!")
 
 def get_player_data(player_name):
     clean_name = re.sub(r'#\d+', '', player_name).strip()
@@ -173,6 +173,7 @@ def get_player_data(player_name):
 
 keep_alive()
 bot.run(TOKEN)
+
 
 
 
