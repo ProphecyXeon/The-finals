@@ -2,9 +2,9 @@ import discord
 from discord import app_commands
 import requests
 import re
+from keep_alive import keep_alive
 import json
 import os
-from keep_alive import keep_alive
 
 # Konfiguration
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -17,6 +17,7 @@ RANK_ROLE_IDS = {
     "Diamond": 1351088880715042906,
     "Ruby": 1351089295238103122
 }
+
 VERIFIED_USERS_FILE = "verified_users.json"
 
 def load_verified_users():
@@ -26,7 +27,7 @@ def load_verified_users():
         with open(VERIFIED_USERS_FILE, "r", encoding="utf-8") as file:
             return json.load(file)
     except json.JSONDecodeError:
-        print("❌ Fehler: verified_users.json ist beschädigt.")
+        print("❌ Fehler: verified_users.json ist beschädigt. Zurücksetzen auf {}.")
         return {}
 
 def save_verified_users(data):
@@ -130,6 +131,7 @@ class MyBot(discord.Client):
         self.tree = app_commands.CommandTree(self)
 
     async def on_ready(self):
+        await self.tree.clear_commands(guild=discord.Object(id=GUILD_ID))
         await self.tree.sync(guild=discord.Object(id=GUILD_ID))
         print(f"✅ Bot ist online als {self.user}")
         channel = self.get_channel(VERIFY_CHANNEL_ID)
@@ -149,6 +151,7 @@ async def rank(interaction: discord.Interaction, name: str):
     if not player_data:
         await interaction.response.send_message("❌ Spieler nicht gefunden.")
         return
+
     league = player_data.get("league", "Unbekannt")
     await interaction.response.send_message(f"🏆 **{name}** ist in der Liga: **{league}**.")
 
@@ -170,5 +173,6 @@ def get_player_data(player_name):
 
 keep_alive()
 bot.run(TOKEN)
+
 
 
