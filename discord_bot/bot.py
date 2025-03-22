@@ -143,8 +143,8 @@ class MyBot(discord.Client):
 
 bot = MyBot()
 
-@MyBot.tree.command(name="rank", description="Zeigt dein aktuelles The Finals Ranking an")
-@app_commands.describe(name="name", description="Dein Spielername")
+@bot.tree.command(name="rank", description="Zeigt dein aktuelles The Finals Ranking an")
+@app_commands.describe(name="Dein Spielername")
 async def rank(interaction: discord.Interaction, name: str):
     player_data = get_player_data(name)
     if not player_data:
@@ -154,7 +154,7 @@ async def rank(interaction: discord.Interaction, name: str):
     league = player_data.get("league", "Unbekannt")
     await interaction.response.send_message(f"🏆 **{name}** ist in der Liga: **{league}**.")
 
-@MyBot.tree.command(name="debug", description="Testet ob der Bot richtig läuft")
+@bot.tree.command(name="debug", description="Testet ob der Bot richtig läuft")
 async def debug(interaction: discord.Interaction):
     await interaction.response.send_message("✅ Der Bot läuft einwandfrei!")
 
@@ -172,4 +172,3 @@ def get_player_data(player_name):
 
 keep_alive()
 bot.run(TOKEN)
-
