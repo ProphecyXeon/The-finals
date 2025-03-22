@@ -2,9 +2,9 @@ import discord
 from discord import app_commands
 import requests
 import re
-from keep_alive import keep_alive
 import json
 import os
+from keep_alive import keep_alive
 
 # Konfiguration
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -17,13 +17,12 @@ RANK_ROLE_IDS = {
     "Diamond": 1351088880715042906,
     "Ruby": 1351089295238103122
 }
-
 VERIFIED_USERS_FILE = "verified_users.json"
 
 def load_verified_users():
-    if not os.path.exists(VERIFIED_USERS_FILE):
-        return {}
     try:
+        if not os.path.exists(VERIFIED_USERS_FILE):
+            return {}
         with open(VERIFIED_USERS_FILE, "r", encoding="utf-8") as file:
             return json.load(file)
     except json.JSONDecodeError:
@@ -32,11 +31,12 @@ def load_verified_users():
 
 def save_verified_users(data):
     try:
+        print("📝 Speichere JSON-Datei...")
         with open(VERIFIED_USERS_FILE, "w", encoding="utf-8") as file:
             json.dump(data, file, indent=4)
-        print("✅ JSON gespeichert:", data)
+        print("✅ JSON erfolgreich gespeichert:", data)
     except Exception as e:
-        print(f"❌ Fehler beim Speichern: {e}")
+        print(f"❌ Fehler beim Speichern der JSON-Datei: {e}")
 
 verified_users = load_verified_users()
 
@@ -52,50 +52,58 @@ class VerifyModal(discord.ui.Modal, title="Verifizierung"):
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        player_name = self.name_input.value.strip()
-        player_data = get_player_data(player_name)
+        try:
+            await interaction.response.defer(ephemeral=True)
+            player_name = self.name_input.value.strip()
+            player_data = get_player_data(player_name)
+            if not player_data:
+                await interaction.followup.send("❌ Kein Spieler mit diesem Namen gefunden.", ephemeral=True)
+                return
 
-        if not player_data:
-            await interaction.response.send_message("❌ Spieler nicht gefunden.", ephemeral=True)
-            return
+            guild = interaction.guild
+            member = interaction.user
+            verified_role = guild.get_role(VERIFIED_ROLE_ID)
+            league = player_data.get("league", "Unbekannt")
+            normalized_league = league.split()[0]
+            rank_role_id = RANK_ROLE_IDS.get(normalized_league, None)
+            rank_role = guild.get_role(rank_role_id) if rank_role_id else None
 
-        guild = interaction.guild
-        member = interaction.user
-        verified_role = guild.get_role(VERIFIED_ROLE_ID)
-        league = player_data.get("league", "Unbekannt")
-        normalized_league = league.split()[0]
-        rank_role_id = RANK_ROLE_IDS.get(normalized_league)
-        rank_role = guild.get_role(rank_role_id) if rank_role_id else None
+            if str(member.id) in verified_users:
+                old_name = verified_users[str(member.id)]
+                if old_name != player_name:
+                    await interaction.followup.send(
+                        f"❌ Du bist bereits mit dem Namen **{old_name}** verifiziert!",
+                        ephemeral=True
+                    )
+                    return
 
-        if str(member.id) in verified_users and verified_users[str(member.id)] != player_name:
-            await interaction.response.send_message(
-                f"❌ Du bist bereits als **{verified_users[str(member.id)]}** verifiziert.",
+            current_rank_roles = [role for role in member.roles if role.id in RANK_ROLE_IDS.values()]
+            if current_rank_roles:
+                await member.remove_roles(*current_rank_roles)
+
+            if verified_role:
+                await member.add_roles(verified_role)
+
+            if rank_role:
+                await member.add_roles(rank_role)
+                try:
+                    await member.edit(nick=player_name)
+                    print(f"✅ Nickname von {member.name} geändert.")
+                except discord.Forbidden:
+                    print("⚠️ Keine Berechtigung zum Ändern des Nicknames.")
+                except Exception as e:
+                    print(f"❌ Fehler beim Nickname ändern: {e}")
+
+            verified_users[str(member.id)] = player_name
+            save_verified_users(verified_users)
+
+            await interaction.followup.send(
+                f"✅ Verifiziert als {player_data['name']} – Liga **{rank_role.name if rank_role else 'Unbekannt'}**.",
                 ephemeral=True
             )
-            return
-
-        current_rank_roles = [role for role in member.roles if role.id in RANK_ROLE_IDS.values()]
-        if current_rank_roles:
-            await member.remove_roles(*current_rank_roles)
-
-        if verified_role:
-            await member.add_roles(verified_role)
-        if rank_role:
-            await member.add_roles(rank_role)
-            try:
-                await member.edit(nick=player_name)
-            except discord.Forbidden:
-                print("⚠️ Keine Berechtigung, Nickname zu ändern.")
-            except Exception as e:
-                print("❌ Fehler beim Nickname ändern:", e)
-
-        verified_users[str(member.id)] = player_name
-        save_verified_users(verified_users)
-
-        await interaction.response.send_message(
-            f"✅ Verifiziert als {player_data['name']} – Liga **{rank_role.name if rank_role else 'Unbekannt'}**.",
-            ephemeral=True
-        )
+        except Exception as e:
+            print(f"❌ Fehler in VerifyModal: {e}")
+            await interaction.followup.send("❌ Ein Fehler ist aufgetreten.", ephemeral=True)
 
 class VerifyButton(discord.ui.View):
     def __init__(self):
@@ -115,12 +123,27 @@ class MyBot(discord.Client):
         super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
 
-    async def on_ready(self):
-        # Force-clear and resync commands to fix mismatch
+    async def setup_hook(self):
         self.tree.clear_commands(guild=discord.Object(id=GUILD_ID))
-        await self.tree.sync(guild=discord.Object(id=GUILD_ID))
-        print(f"✅ Bot ist online als {self.user}")
 
+        @self.tree.command(name="rank", description="Zeigt dein aktuelles The Finals Ranking an", guild=discord.Object(id=GUILD_ID))
+        @app_commands.describe(name="Dein Spielername")
+        async def rank(interaction: discord.Interaction, name: str):
+            player_data = get_player_data(name)
+            if not player_data:
+                await interaction.response.send_message("❌ Spieler nicht gefunden.")
+                return
+            league = player_data.get("league", "Unbekannt")
+            await interaction.response.send_message(f"🏆 **{name}** ist in der Liga: **{league}**.")
+
+        @self.tree.command(name="debug", description="Testet ob der Bot richtig läuft", guild=discord.Object(id=GUILD_ID))
+        async def debug(interaction: discord.Interaction):
+            await interaction.response.send_message("✅ Der Bot läuft einwandfrei!")
+
+        await self.tree.sync(guild=discord.Object(id=GUILD_ID))
+
+    async def on_ready(self):
+        print(f"✅ Bot ist online als {self.user}")
         channel = self.get_channel(VERIFY_CHANNEL_ID)
         if channel:
             await channel.purge(limit=5)
@@ -130,22 +153,6 @@ class MyBot(discord.Client):
             )
 
 bot = MyBot()
-
-# Slash-Befehl: /rank
-@bot.tree.command(name="rank", description="Zeigt dein aktuelles The Finals Ranking an")
-@app_commands.describe(name="Dein Spielername")
-async def rank(interaction: discord.Interaction, name: str):
-    player_data = get_player_data(name)
-    if not player_data:
-        await interaction.response.send_message("❌ Spieler nicht gefunden.")
-        return
-    league = player_data.get("league", "Unbekannt")
-    await interaction.response.send_message(f"🏆 **{name}** ist in der Liga: **{league}**.")
-
-# Slash-Befehl: /debug
-@bot.tree.command(name="debug", description="Testet ob der Bot funktioniert")
-async def debug(interaction: discord.Interaction):
-    await interaction.response.send_message("✅ Der Bot funktioniert!")
 
 def get_player_data(player_name):
     clean_name = re.sub(r'#\d+', '', player_name).strip()
