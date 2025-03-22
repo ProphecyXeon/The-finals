@@ -1,5 +1,4 @@
-# Nach dem Reset muss der Code erneut ausgeführt werden, um die Datei bereitzustellen.
-code = '''import discord
+import discord
 from discord import app_commands
 import requests
 import re
@@ -160,7 +159,7 @@ async def debug(interaction: discord.Interaction):
     await interaction.response.send_message("✅ Der Bot läuft einwandfrei!")
 
 def get_player_data(player_name):
-    clean_name = re.sub(r'#\\d+', '', player_name).strip()
+    clean_name = re.sub(r'#\d+', '', player_name).strip()
     url = f"https://api.the-finals-leaderboard.com/v1/leaderboard/s6/crossplay?name={clean_name}"
     print(f"🔍 API-Request: {url}")
     response = requests.get(url)
@@ -173,10 +172,4 @@ def get_player_data(player_name):
 
 keep_alive()
 bot.run(TOKEN)
-'''
-
-with open("/mnt/data/bot_final.py", "w", encoding="utf-8") as f:
-    f.write(code)
-
-"/mnt/data/bot_final.py"
 
