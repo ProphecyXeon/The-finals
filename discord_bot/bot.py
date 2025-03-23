@@ -131,7 +131,7 @@ class MyBot(discord.Client):
         self.tree = app_commands.CommandTree(self)
 
     async def on_ready(self):
-        await self.tree.clear_commands(guild=discord.Object(id=GUILD_ID))  # Alte löschen
+        self.tree.clear_commands(guild=discord.Object(id=GUILD_ID))
         await self.tree.sync(guild=discord.Object(id=GUILD_ID))            # Neue registrieren
         print(f"✅ Bot ist online als {self.user}")
         channel = self.get_channel(VERIFY_CHANNEL_ID)
