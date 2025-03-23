@@ -131,8 +131,8 @@ class MyBot(discord.Client):
         self.tree = app_commands.CommandTree(self)
 
     async def on_ready(self):
-        self.tree.clear_commands(guild=discord.Object(id=GUILD_ID))
-        await self.tree.sync(guild=discord.Object(id=GUILD_ID))            # Neue registrieren
+        await self.wait_until_ready()
+        await self.tree.sync(guild=discord.Object(id=GUILD_ID))  # Slash-Befehle neu registrieren
         print(f"✅ Bot ist online als {self.user}")
         channel = self.get_channel(VERIFY_CHANNEL_ID)
         if channel:
@@ -148,13 +148,18 @@ bot = MyBot()
 @bot.tree.command(name="rank", description="Zeigt dein aktuelles The Finals Ranking an")
 @app_commands.describe(name="Dein Spielername")
 async def rank(interaction: discord.Interaction, name: str):
-    player_data = get_player_data(name)
-    if not player_data:
-        await interaction.response.send_message("❌ Spieler nicht gefunden.", ephemeral=True)
-        return
+    try:
+        await interaction.response.defer(ephemeral=True)
+        player_data = get_player_data(name)
+        if not player_data:
+            await interaction.followup.send("❌ Spieler nicht gefunden.", ephemeral=True)
+            return
 
-    league = player_data.get("league", "Unbekannt")
-    await interaction.response.send_message(f"🏆 **{name}** ist in der Liga: **{league}**.", ephemeral=True)
+        league = player_data.get("league", "Unbekannt")
+        await interaction.followup.send(f"🏆 **{name}** ist in der Liga: **{league}**.", ephemeral=True)
+    except Exception as e:
+        print("Fehler bei /rank:", e)
+        await interaction.followup.send("❌ Beim Abrufen ist ein Fehler aufgetreten.", ephemeral=True)
 
 # Slash-Befehl: /debug
 @bot.tree.command(name="debug", description="Testet ob der Bot richtig läuft")
@@ -175,6 +180,7 @@ def get_player_data(player_name):
 
 keep_alive()
 bot.run(TOKEN)
+
 
 
 
