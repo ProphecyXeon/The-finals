@@ -6,6 +6,7 @@ import json
 import os
 from keep_alive import keep_alive
 
+# Konfiguration
 TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = 1351070896441528351
 VERIFY_CHANNEL_ID = 1351657754888110193
@@ -20,9 +21,9 @@ RANK_ROLE_IDS = {
 VERIFIED_USERS_FILE = "verified_users.json"
 
 def load_verified_users():
+    if not os.path.exists(VERIFIED_USERS_FILE):
+        return {}
     try:
-        if not os.path.exists(VERIFIED_USERS_FILE):
-            return {}
         with open(VERIFIED_USERS_FILE, "r", encoding="utf-8") as file:
             return json.load(file)
     except json.JSONDecodeError:
@@ -31,7 +32,6 @@ def load_verified_users():
 
 def save_verified_users(data):
     try:
-        print("📝 Speichere JSON-Datei...")
         with open(VERIFIED_USERS_FILE, "w", encoding="utf-8") as file:
             json.dump(data, file, indent=4)
         print("✅ JSON erfolgreich gespeichert:", data)
@@ -65,17 +65,15 @@ class VerifyModal(discord.ui.Modal, title="Verifizierung"):
             verified_role = guild.get_role(VERIFIED_ROLE_ID)
             league = player_data.get("league", "Unbekannt")
             normalized_league = league.split()[0]
-            rank_role_id = RANK_ROLE_IDS.get(normalized_league, None)
+            rank_role_id = RANK_ROLE_IDS.get(normalized_league)
             rank_role = guild.get_role(rank_role_id) if rank_role_id else None
 
-            if str(member.id) in verified_users:
-                old_name = verified_users[str(member.id)]
-                if old_name != player_name:
-                    await interaction.followup.send(
-                        f"❌ Du bist bereits mit dem Namen **{old_name}** verifiziert!",
-                        ephemeral=True
-                    )
-                    return
+            if str(member.id) in verified_users and verified_users[str(member.id)] != player_name:
+                await interaction.followup.send(
+                    f"❌ Du bist bereits mit dem Namen **{verified_users[str(member.id)]}** verifiziert!",
+                    ephemeral=True
+                )
+                return
 
             current_rank_roles = [role for role in member.roles if role.id in RANK_ROLE_IDS.values()]
             if current_rank_roles:
@@ -88,9 +86,8 @@ class VerifyModal(discord.ui.Modal, title="Verifizierung"):
                 await member.add_roles(rank_role)
                 try:
                     await member.edit(nick=player_name)
-                    print(f"✅ Nickname von {member.name} geändert.")
                 except discord.Forbidden:
-                    print(f"⚠️ Keine Berechtigung zum Ändern des Nicknames.")
+                    print("⚠️ Keine Berechtigung zum Ändern des Nicknames.")
                 except Exception as e:
                     print(f"❌ Fehler beim Nickname ändern: {e}")
 
@@ -126,10 +123,6 @@ class MyBot(discord.Client):
     async def setup_hook(self):
         guild = discord.Object(id=GUILD_ID)
 
-        # Zuerst alte Slash-Befehle löschen
-        self.tree.clear_commands(guild=guild)
-
-        # Slash-Befehl: /rank
         @self.tree.command(name="rank", description="Zeigt dein aktuelles The Finals Ranking an", guild=guild)
         @app_commands.describe(player="Dein Spielername")
         async def rank(interaction: discord.Interaction, player: str):
@@ -138,14 +131,15 @@ class MyBot(discord.Client):
                 await interaction.response.send_message("❌ Spieler nicht gefunden.", ephemeral=True)
                 return
             league = player_data.get("league", "Unbekannt")
-            await interaction.response.send_message(f"🏆 **{player}** ist in der Liga: **{league}**.", ephemeral=True)
+            await interaction.response.send_message(
+                f"🏆 **{player_data['name']}** ist in der Liga: **{league}**.",
+                ephemeral=True
+            )
 
-        # Slash-Befehl: /debug
         @self.tree.command(name="debug", description="Testet ob der Bot richtig läuft", guild=guild)
         async def debug(interaction: discord.Interaction):
             await interaction.response.send_message("✅ Der Bot läuft einwandfrei!", ephemeral=True)
 
-        # Neue Befehle synchronisieren
         await self.tree.sync(guild=guild)
 
     async def on_ready(self):
@@ -174,5 +168,6 @@ def get_player_data(player_name):
 
 keep_alive()
 bot.run(TOKEN)
+
 
 
