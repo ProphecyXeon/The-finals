@@ -4,7 +4,7 @@ import requests
 import re
 import json
 import os
-from keep_alive import keep_alive  # Nur nötig, wenn du den Bot via Webdienst am Leben hältst
+from keep_alive import keep_alive  # Nur falls du das brauchst
 
 # Konfiguration
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -32,7 +32,6 @@ def load_verified_users():
 
 def save_verified_users(data):
     try:
-        print("📝 Speichere JSON-Datei...")
         with open(VERIFIED_USERS_FILE, "w", encoding="utf-8") as file:
             json.dump(data, file, indent=4)
         print("✅ JSON erfolgreich gespeichert:", data)
@@ -89,11 +88,8 @@ class VerifyModal(discord.ui.Modal, title="Verifizierung"):
                 await member.add_roles(rank_role)
                 try:
                     await member.edit(nick=player_name)
-                    print(f"✅ Nickname von {member.name} geändert.")
                 except discord.Forbidden:
-                    print(f"⚠️ Keine Berechtigung zum Ändern des Nicknames.")
-                except Exception as e:
-                    print(f"❌ Fehler beim Nickname ändern: {e}")
+                    print("⚠️ Keine Berechtigung zum Ändern des Nicknames.")
 
             verified_users[str(member.id)] = player_name
             save_verified_users(verified_users)
@@ -127,11 +123,8 @@ class MyBot(discord.Client):
 
     async def setup_hook(self):
         guild = discord.Object(id=GUILD_ID)
-        try:
-            await self.tree.sync(guild=guild)
-            print("✅ Slash-Befehle synchronisiert!")
-        except Exception as e:
-            print(f"❌ Fehler beim Synchronisieren: {e}")
+        await self.tree.sync(guild=guild)  # ← wichtig!
+        print("✅ Slash-Befehle synchronisiert!")
 
     async def on_ready(self):
         print(f"✅ Bot ist online als {self.user}")
@@ -153,6 +146,7 @@ async def rank(interaction: discord.Interaction, name: str):
     if not player_data:
         await interaction.response.send_message("❌ Spieler nicht gefunden.", ephemeral=True)
         return
+
     league = player_data.get("league", "Unbekannt")
     await interaction.response.send_message(f"🏆 **{name}** ist in der Liga: **{league}**.", ephemeral=True)
 
@@ -173,10 +167,8 @@ def get_player_data(player_name):
     print("❌ Kein Spieler gefunden")
     return None
 
-keep_alive()  # Entferne das, wenn du den Bot lokal oder mit Railway betreibst
+keep_alive()  # Optional, wenn du einen Webserver brauchst
 bot.run(TOKEN)
-
-
 
 
 
