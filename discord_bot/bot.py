@@ -123,42 +123,33 @@ class MyBot(discord.Client):
     async def setup_hook(self):
         guild = discord.Object(id=GUILD_ID)
 
-        # ❌ Alle alten Commands (auch global) löschen
-        self.tree.clear_commands(guild=None)
-        await self.tree.sync(guild=None)
+        # Befehle definieren
+        @self.tree.command(name="rankcheck", description="Zeigt dein aktuelles The Finals Ranking an", guild=guild)
+        @app_commands.describe(player="Dein Spielername")
+        async def rankcheck(interaction: discord.Interaction, player: str):
+            player_data = get_player_data(player)
+            if not player_data:
+                await interaction.response.send_message("❌ Spieler nicht gefunden.", ephemeral=True)
+                return
 
-        self.tree.clear_commands(guild=guild)
-        await self.tree.sync(guild=guild)
+            name = player_data.get("name", "Unbekannt")
+            rank = player_data.get("rank", "Unbekannt")
+            league = player_data.get("league", "Unbekannt")
+            rating = player_data.get("rating", "Unbekannt")
 
-        # ✅ Nur die neuen Commands registrieren
-@self.tree.command(name="rankcheck", description="Zeigt dein aktuelles The Finals Ranking an", guild=guild)
-@app_commands.describe(player="Dein Spielername")
-async def rankcheck(interaction: discord.Interaction, player: str):
-    player_data = get_player_data(player)
-    if not player_data:
-        await interaction.response.send_message("❌ Spieler nicht gefunden.", ephemeral=True)
-        return
-
-    name = player_data.get("name", "Unbekannt")
-    rank = player_data.get("rank", "Unbekannt")
-    league = player_data.get("league", "Unbekannt")
-    rating = player_data.get("rating", "Unbekannt")
-
-    msg = (
-        f"🔹 **Spieler:** {name}\n"
-        f"🏆 **Rang:** {rank}\n"
-        f"💎 **Liga:** {league}\n"
-        f"🔢 **Punkte:** {rating}"
-    )
-    await interaction.response.send_message(msg, ephemeral=True)
-
-
- 
+            msg = (
+                f"🔹 **Spieler:** {name}\n"
+                f"🏆 **Rang:** {rank}\n"
+                f"💎 **Liga:** {league}\n"
+                f"🔢 **Punkte:** {rating}"
+            )
+            await interaction.response.send_message(msg, ephemeral=True)
 
         @self.tree.command(name="debug", description="Testet ob der Bot richtig läuft", guild=guild)
         async def debug(interaction: discord.Interaction):
             await interaction.response.send_message("✅ Der Bot läuft einwandfrei!", ephemeral=True)
 
+        # Sync nur neue, keine alten löschen!
         await self.tree.sync(guild=guild)
 
     async def on_ready(self):
@@ -187,3 +178,4 @@ def get_player_data(player_name):
 
 keep_alive()
 bot.run(TOKEN)
+
