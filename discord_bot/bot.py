@@ -2,9 +2,9 @@ import discord
 from discord import app_commands
 import requests
 import re
+from keep_alive import keep_alive
 import json
 import os
-from keep_alive import keep_alive  # Nur falls du das brauchst
 
 # Konfiguration
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -32,6 +32,7 @@ def load_verified_users():
 
 def save_verified_users(data):
     try:
+        print("📝 Speichere JSON-Datei...")
         with open(VERIFIED_USERS_FILE, "w", encoding="utf-8") as file:
             json.dump(data, file, indent=4)
         print("✅ JSON erfolgreich gespeichert:", data)
@@ -88,16 +89,24 @@ class VerifyModal(discord.ui.Modal, title="Verifizierung"):
                 await member.add_roles(rank_role)
                 try:
                     await member.edit(nick=player_name)
+                    print(f"✅ Nickname von {member.name} geändert.")
                 except discord.Forbidden:
-                    print("⚠️ Keine Berechtigung zum Ändern des Nicknames.")
+                    print(f"⚠️ Keine Berechtigung zum Ändern des Nicknames.")
+                except Exception as e:
+                    print(f"❌ Fehler beim Nickname ändern: {e}")
 
-            verified_users[str(member.id)] = player_name
-            save_verified_users(verified_users)
+                verified_users[str(member.id)] = player_name
+                save_verified_users(verified_users)
 
-            await interaction.followup.send(
-                f"✅ Verifiziert als {player_data['name']} – Liga **{rank_role.name if rank_role else 'Unbekannt'}**.",
-                ephemeral=True
-            )
+                await interaction.followup.send(
+                    f"✅ Verifiziert als {player_data['name']} – Liga **{rank_role.name}**.",
+                    ephemeral=True
+                )
+            else:
+                await interaction.followup.send(
+                    f"✅ Verifiziert als {player_data['name']}, aber keine passende Liga-Rolle gefunden.",
+                    ephemeral=True
+                )
 
         except Exception as e:
             print(f"❌ Fehler in VerifyModal: {e}")
@@ -123,8 +132,26 @@ class MyBot(discord.Client):
 
     async def setup_hook(self):
         guild = discord.Object(id=GUILD_ID)
-        await self.tree.sync(guild=guild)  # ← wichtig!
-        print("✅ Slash-Befehle synchronisiert!")
+
+        # Slash-Befehl: /rank
+        @self.tree.command(name="rank", description="Zeigt dein aktuelles The Finals Ranking an", guild=guild)
+        @app_commands.describe(player="Dein Spielername")
+        async def rank(interaction: discord.Interaction, player: str):
+            player_data = get_player_data(player)
+            if not player_data:
+                await interaction.response.send_message("❌ Spieler nicht gefunden.", ephemeral=True)
+                return
+            league = player_data.get("league", "Unbekannt")
+            await interaction.response.send_message(f"🏆 **{player}** ist in der Liga: **{league}**.", ephemeral=True)
+
+        # Slash-Befehl: /debug
+        @self.tree.command(name="debug", description="Testet ob der Bot richtig läuft", guild=guild)
+        async def debug(interaction: discord.Interaction):
+            await interaction.response.send_message("✅ Der Bot läuft einwandfrei!", ephemeral=True)
+
+        # Alte Commands entfernen und neue syncen
+        await self.tree.clear_commands(guild=guild)
+        await self.tree.sync(guild=guild)
 
     async def on_ready(self):
         print(f"✅ Bot ist online als {self.user}")
@@ -138,23 +165,6 @@ class MyBot(discord.Client):
 
 bot = MyBot()
 
-# Slash-Befehl: /rank
-@bot.tree.command(name="rank", description="Zeigt dein aktuelles The Finals Ranking an")
-@app_commands.describe(name="Dein Spielername")
-async def rank(interaction: discord.Interaction, name: str):
-    player_data = get_player_data(name)
-    if not player_data:
-        await interaction.response.send_message("❌ Spieler nicht gefunden.", ephemeral=True)
-        return
-
-    league = player_data.get("league", "Unbekannt")
-    await interaction.response.send_message(f"🏆 **{name}** ist in der Liga: **{league}**.", ephemeral=True)
-
-# Slash-Befehl: /debug
-@bot.tree.command(name="debug", description="Testet ob der Bot richtig läuft")
-async def debug(interaction: discord.Interaction):
-    await interaction.response.send_message("✅ Der Bot läuft einwandfrei!", ephemeral=True)
-
 def get_player_data(player_name):
     clean_name = re.sub(r'#\d+', '', player_name).strip()
     url = f"https://api.the-finals-leaderboard.com/v1/leaderboard/s6/crossplay?name={clean_name}"
@@ -167,8 +177,7 @@ def get_player_data(player_name):
     print("❌ Kein Spieler gefunden")
     return None
 
-keep_alive()  # Optional, wenn du einen Webserver brauchst
+keep_alive()
 bot.run(TOKEN)
-
 
 
