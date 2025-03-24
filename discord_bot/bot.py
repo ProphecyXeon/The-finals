@@ -2,11 +2,10 @@ import discord
 from discord import app_commands
 import requests
 import re
-from keep_alive import keep_alive
 import json
 import os
+from keep_alive import keep_alive
 
-# Konfiguration
 TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = 1351070896441528351
 VERIFY_CHANNEL_ID = 1351657754888110193
@@ -95,19 +94,13 @@ class VerifyModal(discord.ui.Modal, title="Verifizierung"):
                 except Exception as e:
                     print(f"❌ Fehler beim Nickname ändern: {e}")
 
-                verified_users[str(member.id)] = player_name
-                save_verified_users(verified_users)
+            verified_users[str(member.id)] = player_name
+            save_verified_users(verified_users)
 
-                await interaction.followup.send(
-                    f"✅ Verifiziert als {player_data['name']} – Liga **{rank_role.name}**.",
-                    ephemeral=True
-                )
-            else:
-                await interaction.followup.send(
-                    f"✅ Verifiziert als {player_data['name']}, aber keine passende Liga-Rolle gefunden.",
-                    ephemeral=True
-                )
-
+            await interaction.followup.send(
+                f"✅ Verifiziert als {player_data['name']} – Liga **{rank_role.name if rank_role else 'Unbekannt'}**.",
+                ephemeral=True
+            )
         except Exception as e:
             print(f"❌ Fehler in VerifyModal: {e}")
             await interaction.followup.send("❌ Ein Fehler ist aufgetreten.", ephemeral=True)
@@ -133,10 +126,6 @@ class MyBot(discord.Client):
     async def setup_hook(self):
         guild = discord.Object(id=GUILD_ID)
 
-    async def setup_hook(self):
-        guild = discord.Object(id=GUILD_ID)
-
-        # Slash-Befehl: /rank
         @self.tree.command(name="rank", description="Zeigt dein aktuelles The Finals Ranking an", guild=guild)
         @app_commands.describe(player="Dein Spielername")
         async def rank(interaction: discord.Interaction, player: str):
@@ -147,15 +136,12 @@ class MyBot(discord.Client):
             league = player_data.get("league", "Unbekannt")
             await interaction.response.send_message(f"🏆 **{player}** ist in der Liga: **{league}**.", ephemeral=True)
 
-        # Slash-Befehl: /debug
         @self.tree.command(name="debug", description="Testet ob der Bot richtig läuft", guild=guild)
         async def debug(interaction: discord.Interaction):
             await interaction.response.send_message("✅ Der Bot läuft einwandfrei!", ephemeral=True)
 
-        # ❗️Wichtig: KEIN await hier!
         self.tree.clear_commands(guild=guild)
         await self.tree.sync(guild=guild)
-
 
     async def on_ready(self):
         print(f"✅ Bot ist online als {self.user}")
@@ -183,5 +169,4 @@ def get_player_data(player_name):
 
 keep_alive()
 bot.run(TOKEN)
-
 
