@@ -6,11 +6,12 @@ import json
 import os
 from keep_alive import keep_alive
 
-# Konfiguration
 TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = 1351070896441528351
 VERIFY_CHANNEL_ID = 1351657754888110193
+JSON_EDIT_CHANNEL_ID = 1353784055883239434
 VERIFIED_ROLE_ID = 1351658061067976755
+ADMIN_ROLE_ID = 1351089469389930519
 RANK_ROLE_IDS = {
     "Gold": 1351088401880977419,
     "Platinum": 1351088645120987196,
@@ -56,7 +57,6 @@ class VerifyModal(discord.ui.Modal, title="Verifizierung"):
             await interaction.response.defer(ephemeral=True)
             player_name = self.name_input.value.strip()
             player_data = get_player_data(player_name)
-
             if not player_data:
                 await interaction.followup.send("❌ Kein Spieler mit diesem Namen gefunden.", ephemeral=True)
                 return
@@ -69,33 +69,29 @@ class VerifyModal(discord.ui.Modal, title="Verifizierung"):
             rank_role_id = RANK_ROLE_IDS.get(normalized_league)
             rank_role = guild.get_role(rank_role_id) if rank_role_id else None
 
-            # Alte Ränge entfernen
+            # Vorherige Rollen entfernen
             current_rank_roles = [role for role in member.roles if role.id in RANK_ROLE_IDS.values()]
             if current_rank_roles:
                 await member.remove_roles(*current_rank_roles)
 
-            # Verifizierungsrolle geben
+            # Rollen hinzufügen
             if verified_role:
                 await member.add_roles(verified_role)
-
-            # Rangrolle geben
             if rank_role:
                 await member.add_roles(rank_role)
-
-            # Nickname ändern
-            try:
-                await member.edit(nick=player_name)
-            except discord.Forbidden:
-                print("⚠️ Keine Berechtigung zum Ändern des Nicknames.")
-            except Exception as e:
-                print(f"❌ Fehler beim Nickname ändern: {e}")
+                try:
+                    await member.edit(nick=player_name)
+                except discord.Forbidden:
+                    print("⚠️ Keine Berechtigung zum Ändern des Nicknames.")
+                except Exception as e:
+                    print(f"❌ Fehler beim Nickname ändern: {e}")
 
             # JSON aktualisieren
             verified_users[str(member.id)] = player_name
             save_verified_users(verified_users)
 
             await interaction.followup.send(
-                f"✅ Verifiziert als **{player_data['name']}** – Liga **{rank_role.name if rank_role else 'Unbekannt'}**.",
+                f"✅ Verifiziert als {player_data['name']} – Liga **{rank_role.name if rank_role else 'Unbekannt'}**.",
                 ephemeral=True
             )
         except Exception as e:
@@ -123,9 +119,10 @@ class MyBot(discord.Client):
     async def setup_hook(self):
         guild = discord.Object(id=GUILD_ID)
 
+        # Slash-Befehl /rankcheck
         @self.tree.command(name="rankcheck", description="Zeigt dein aktuelles The Finals Ranking an", guild=guild)
-        @app_commands.describe(player="Dein Spielername", privat="Nur du siehst das Ergebnis?")
-        async def rankcheck(interaction: discord.Interaction, player: str, privat: bool = True):
+        @app_commands.describe(player="Dein Spielername", privat="Antwort nur für dich sichtbar?")
+        async def rankcheck(interaction: discord.Interaction, player: str, privat: bool = False):
             player_data = get_player_data(player)
             if not player_data:
                 await interaction.response.send_message("❌ Spieler nicht gefunden.", ephemeral=privat)
@@ -144,9 +141,29 @@ class MyBot(discord.Client):
             )
             await interaction.response.send_message(msg, ephemeral=privat)
 
+        # Slash-Befehl /debug
         @self.tree.command(name="debug", description="Testet ob der Bot richtig läuft", guild=guild)
         async def debug(interaction: discord.Interaction):
             await interaction.response.send_message("✅ Der Bot läuft einwandfrei!", ephemeral=True)
+
+        # JSON ansehen
+        @self.tree.command(name="showjson", description="Zeigt die JSON-Datei an", guild=guild)
+        async def showjson(interaction: discord.Interaction):
+            if not interaction.user.get_role(ADMIN_ROLE_ID):
+                await interaction.response.send_message("❌ Keine Berechtigung.", ephemeral=True)
+                return
+            content = json.dumps(verified_users, indent=2)
+            await interaction.response.send_message(f"```json\n{content}\n```", ephemeral=True)
+
+        # JSON löschen
+        @self.tree.command(name="resetjson", description="Löscht die JSON-Datei komplett", guild=guild)
+        async def resetjson(interaction: discord.Interaction):
+            if not interaction.user.get_role(ADMIN_ROLE_ID):
+                await interaction.response.send_message("❌ Keine Berechtigung.", ephemeral=True)
+                return
+            verified_users.clear()
+            save_verified_users(verified_users)
+            await interaction.response.send_message("✅ JSON-Datei wurde zurückgesetzt.", ephemeral=True)
 
         await self.tree.sync(guild=guild)
 
@@ -154,11 +171,15 @@ class MyBot(discord.Client):
         print(f"✅ Bot ist online als {self.user}")
         channel = self.get_channel(VERIFY_CHANNEL_ID)
         if channel:
-            await channel.purge(limit=5)
-            await channel.send(
-                "**🔒 Willkommen! Bitte verifiziere dich mit deinem *The Finals*-Namen!**",
-                view=VerifyButton()
-            )
+            try:
+                await channel.purge(limit=5)
+                await channel.send(
+                    "**🔒 Willkommen! Bitte verifiziere dich mit deinem *The Finals*-Namen!**",
+                    view=VerifyButton()
+                )
+                print("✅ Neue Verifizierungsnachricht gesendet.")
+            except Exception as e:
+                print(f"❌ Fehler im on_ready: {e}")
 
 bot = MyBot()
 
