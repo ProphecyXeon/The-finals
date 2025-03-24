@@ -125,7 +125,7 @@ class MyBot(discord.Client):
 
         @self.tree.command(name="rankcheck", description="Zeigt dein aktuelles The Finals Ranking an", guild=guild)
         @app_commands.describe(player="Dein Spielername", privat="Nur du kannst die Antwort sehen?")
-        async def rankcheck(interaction: discord.Interaction, player: str, privat: bool = True):
+        async def rankcheck(interaction: discord.Interaction, player: str, privat: bool = False):  # 👈 Default ist jetzt öffentlich
             player_data = get_player_data(player)
             if not player_data:
                 await interaction.response.send_message("❌ Spieler nicht gefunden.", ephemeral=privat)
@@ -176,5 +176,4 @@ def get_player_data(player_name):
 
 keep_alive()
 bot.run(TOKEN)
-
 
