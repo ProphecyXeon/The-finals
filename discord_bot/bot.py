@@ -123,11 +123,14 @@ class MyBot(discord.Client):
     async def setup_hook(self):
         guild = discord.Object(id=GUILD_ID)
 
-        # ❌ Alte Slash-Befehle löschen
+        # ❌ Alle alten Commands (auch global) löschen
+        self.tree.clear_commands(guild=None)
+        await self.tree.sync(guild=None)
+
         self.tree.clear_commands(guild=guild)
         await self.tree.sync(guild=guild)
 
-        # ✅ Neue Slash-Befehle
+        # ✅ Nur die neuen Commands registrieren
         @self.tree.command(name="rankcheck", description="Zeigt dein aktuelles The Finals Ranking an", guild=guild)
         @app_commands.describe(player="Dein Spielername")
         async def rankcheck(interaction: discord.Interaction, player: str):
@@ -173,4 +176,3 @@ def get_player_data(player_name):
 
 keep_alive()
 bot.run(TOKEN)
-
