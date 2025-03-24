@@ -131,9 +131,8 @@ class MyBot(discord.Client):
         self.tree = app_commands.CommandTree(self)
 
     async def on_ready(self):
-        await self.wait_until_ready()
-        await self.tree.sync(guild=discord.Object(id=GUILD_ID))  # Slash-Befehle neu registrieren
         print(f"✅ Bot ist online als {self.user}")
+        await self.tree.sync(guild=discord.Object(id=GUILD_ID))  # Sync damit Slash-Befehle registriert werden
         channel = self.get_channel(VERIFY_CHANNEL_ID)
         if channel:
             await channel.purge(limit=5)
@@ -144,24 +143,16 @@ class MyBot(discord.Client):
 
 bot = MyBot()
 
-# Slash-Befehl: /rank
 @bot.tree.command(name="rank", description="Zeigt dein aktuelles The Finals Ranking an")
 @app_commands.describe(name="Dein Spielername")
 async def rank(interaction: discord.Interaction, name: str):
-    try:
-        await interaction.response.defer(ephemeral=True)
-        player_data = get_player_data(name)
-        if not player_data:
-            await interaction.followup.send("❌ Spieler nicht gefunden.", ephemeral=True)
-            return
+    player_data = get_player_data(name)
+    if not player_data:
+        await interaction.response.send_message("❌ Spieler nicht gefunden.", ephemeral=True)
+        return
+    league = player_data.get("league", "Unbekannt")
+    await interaction.response.send_message(f"🏆 **{name}** ist in der Liga: **{league}**.", ephemeral=True)
 
-        league = player_data.get("league", "Unbekannt")
-        await interaction.followup.send(f"🏆 **{name}** ist in der Liga: **{league}**.", ephemeral=True)
-    except Exception as e:
-        print("Fehler bei /rank:", e)
-        await interaction.followup.send("❌ Beim Abrufen ist ein Fehler aufgetreten.", ephemeral=True)
-
-# Slash-Befehl: /debug
 @bot.tree.command(name="debug", description="Testet ob der Bot richtig läuft")
 async def debug(interaction: discord.Interaction):
     await interaction.response.send_message("✅ Der Bot läuft einwandfrei!", ephemeral=True)
@@ -180,7 +171,6 @@ def get_player_data(player_name):
 
 keep_alive()
 bot.run(TOKEN)
-
 
 
 
