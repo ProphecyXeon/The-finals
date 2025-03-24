@@ -133,6 +133,9 @@ class MyBot(discord.Client):
     async def setup_hook(self):
         guild = discord.Object(id=GUILD_ID)
 
+    async def setup_hook(self):
+        guild = discord.Object(id=GUILD_ID)
+
         # Slash-Befehl: /rank
         @self.tree.command(name="rank", description="Zeigt dein aktuelles The Finals Ranking an", guild=guild)
         @app_commands.describe(player="Dein Spielername")
@@ -149,9 +152,10 @@ class MyBot(discord.Client):
         async def debug(interaction: discord.Interaction):
             await interaction.response.send_message("✅ Der Bot läuft einwandfrei!", ephemeral=True)
 
-        # Alte Commands entfernen und neue syncen
-        await self.tree.clear_commands(guild=guild)
+        # ❗️Wichtig: KEIN await hier!
+        self.tree.clear_commands(guild=guild)
         await self.tree.sync(guild=guild)
+
 
     async def on_ready(self):
         print(f"✅ Bot ist online als {self.user}")
