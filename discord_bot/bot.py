@@ -135,7 +135,7 @@ class MyBot(discord.Client):
             name = player_data.get("name", "Unbekannt")
             rank = player_data.get("rank", "Unbekannt")
             league = player_data.get("league", "Unbekannt")
-            rating = player_data.get("rating", "Unbekannt")
+            rating = player_data.get("rankScore", "Unbekannt")
 
             msg = (
                 f"🔹 **Spieler:** {name}\n"
