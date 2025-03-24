@@ -126,6 +126,10 @@ class MyBot(discord.Client):
     async def setup_hook(self):
         guild = discord.Object(id=GUILD_ID)
 
+        # Zuerst alte Slash-Befehle löschen
+        self.tree.clear_commands(guild=guild)
+
+        # Slash-Befehl: /rank
         @self.tree.command(name="rank", description="Zeigt dein aktuelles The Finals Ranking an", guild=guild)
         @app_commands.describe(player="Dein Spielername")
         async def rank(interaction: discord.Interaction, player: str):
@@ -136,11 +140,12 @@ class MyBot(discord.Client):
             league = player_data.get("league", "Unbekannt")
             await interaction.response.send_message(f"🏆 **{player}** ist in der Liga: **{league}**.", ephemeral=True)
 
+        # Slash-Befehl: /debug
         @self.tree.command(name="debug", description="Testet ob der Bot richtig läuft", guild=guild)
         async def debug(interaction: discord.Interaction):
             await interaction.response.send_message("✅ Der Bot läuft einwandfrei!", ephemeral=True)
 
-        self.tree.clear_commands(guild=guild)
+        # Neue Befehle synchronisieren
         await self.tree.sync(guild=guild)
 
     async def on_ready(self):
@@ -169,4 +174,5 @@ def get_player_data(player_name):
 
 keep_alive()
 bot.run(TOKEN)
+
 
