@@ -131,18 +131,29 @@ class MyBot(discord.Client):
         await self.tree.sync(guild=guild)
 
         # ✅ Nur die neuen Commands registrieren
-        @self.tree.command(name="rankcheck", description="Zeigt dein aktuelles The Finals Ranking an", guild=guild)
-        @app_commands.describe(player="Dein Spielername")
-        async def rankcheck(interaction: discord.Interaction, player: str):
-            player_data = get_player_data(player)
-            if not player_data:
-                await interaction.response.send_message("❌ Spieler nicht gefunden.", ephemeral=True)
-                return
-            league = player_data.get("league", "Unbekannt")
-            await interaction.response.send_message(
-                f"🏆 **{player_data['name']}** ist in der Liga: **{league}**.",
-                ephemeral=True
-            )
+@self.tree.command(name="rankcheck", description="Zeigt dein aktuelles The Finals Ranking an", guild=guild)
+@app_commands.describe(player="Dein Spielername")
+async def rankcheck(interaction: discord.Interaction, player: str):
+    player_data = get_player_data(player)
+    if not player_data:
+        await interaction.response.send_message("❌ Spieler nicht gefunden.", ephemeral=True)
+        return
+
+    name = player_data.get("name", "Unbekannt")
+    rank = player_data.get("rank", "Unbekannt")
+    league = player_data.get("league", "Unbekannt")
+    rating = player_data.get("rating", "Unbekannt")
+
+    msg = (
+        f"🔹 **Spieler:** {name}\n"
+        f"🏆 **Rang:** {rank}\n"
+        f"💎 **Liga:** {league}\n"
+        f"🔢 **Punkte:** {rating}"
+    )
+    await interaction.response.send_message(msg, ephemeral=True)
+
+
+ 
 
         @self.tree.command(name="debug", description="Testet ob der Bot richtig läuft", guild=guild)
         async def debug(interaction: discord.Interaction):
