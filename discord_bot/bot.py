@@ -146,7 +146,7 @@ class MyBot(discord.Client):
             await interaction.response.send_message("✅ Der Bot läuft einwandfrei!", ephemeral=True)
 
         # ⏫ Slash-Befehle synchronisieren
-        await self.tree.sync(guild=guild)
+         self.tree.sync(guild=guild)
 
     async def on_ready(self):
         print(f"✅ Bot ist online als {self.user}")
