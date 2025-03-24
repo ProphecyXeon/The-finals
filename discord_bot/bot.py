@@ -2,9 +2,9 @@ import discord
 from discord import app_commands
 import requests
 import re
-from keep_alive import keep_alive
 import json
 import os
+from keep_alive import keep_alive  # Nur nötig, wenn du den Bot via Webdienst am Leben hältst
 
 # Konfiguration
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -95,18 +95,13 @@ class VerifyModal(discord.ui.Modal, title="Verifizierung"):
                 except Exception as e:
                     print(f"❌ Fehler beim Nickname ändern: {e}")
 
-                verified_users[str(member.id)] = player_name
-                save_verified_users(verified_users)
+            verified_users[str(member.id)] = player_name
+            save_verified_users(verified_users)
 
-                await interaction.followup.send(
-                    f"✅ Verifiziert als {player_data['name']} – Liga **{rank_role.name}**.",
-                    ephemeral=True
-                )
-            else:
-                await interaction.followup.send(
-                    f"✅ Verifiziert als {player_data['name']}, aber keine passende Liga-Rolle gefunden.",
-                    ephemeral=True
-                )
+            await interaction.followup.send(
+                f"✅ Verifiziert als {player_data['name']} – Liga **{rank_role.name if rank_role else 'Unbekannt'}**.",
+                ephemeral=True
+            )
 
         except Exception as e:
             print(f"❌ Fehler in VerifyModal: {e}")
@@ -130,9 +125,16 @@ class MyBot(discord.Client):
         super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
 
+    async def setup_hook(self):
+        guild = discord.Object(id=GUILD_ID)
+        try:
+            await self.tree.sync(guild=guild)
+            print("✅ Slash-Befehle synchronisiert!")
+        except Exception as e:
+            print(f"❌ Fehler beim Synchronisieren: {e}")
+
     async def on_ready(self):
         print(f"✅ Bot ist online als {self.user}")
-        await self.tree.sync(guild=discord.Object(id=GUILD_ID))  # Sync damit Slash-Befehle registriert werden
         channel = self.get_channel(VERIFY_CHANNEL_ID)
         if channel:
             await channel.purge(limit=5)
@@ -143,6 +145,7 @@ class MyBot(discord.Client):
 
 bot = MyBot()
 
+# Slash-Befehl: /rank
 @bot.tree.command(name="rank", description="Zeigt dein aktuelles The Finals Ranking an")
 @app_commands.describe(name="Dein Spielername")
 async def rank(interaction: discord.Interaction, name: str):
@@ -153,6 +156,7 @@ async def rank(interaction: discord.Interaction, name: str):
     league = player_data.get("league", "Unbekannt")
     await interaction.response.send_message(f"🏆 **{name}** ist in der Liga: **{league}**.", ephemeral=True)
 
+# Slash-Befehl: /debug
 @bot.tree.command(name="debug", description="Testet ob der Bot richtig läuft")
 async def debug(interaction: discord.Interaction):
     await interaction.response.send_message("✅ Der Bot läuft einwandfrei!", ephemeral=True)
@@ -169,9 +173,8 @@ def get_player_data(player_name):
     print("❌ Kein Spieler gefunden")
     return None
 
-keep_alive()
+keep_alive()  # Entferne das, wenn du den Bot lokal oder mit Railway betreibst
 bot.run(TOKEN)
-
 
 
 
