@@ -17,7 +17,6 @@ RANK_ROLE_IDS = {
     "Diamond": 1351088880715042906,
     "Ruby": 1351089295238103122
 }
-
 VERIFIED_USERS_FILE = "verified_users.json"
 
 def load_verified_users():
@@ -104,7 +103,7 @@ class VerifyModal(discord.ui.Modal, title="Verifizierung"):
 
 class VerifyButton(discord.ui.View):
     def __init__(self):
-        super().__init__()
+        super().__init__(timeout=None)  # wichtig: damit die View dauerhaft aktiv bleibt
 
     @discord.ui.button(label="Verifizieren", style=discord.ButtonStyle.green)
     async def verify(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -123,7 +122,6 @@ class MyBot(discord.Client):
     async def setup_hook(self):
         guild = discord.Object(id=GUILD_ID)
 
-        # Befehle definieren
         @self.tree.command(name="rankcheck", description="Zeigt dein aktuelles The Finals Ranking an", guild=guild)
         @app_commands.describe(player="Dein Spielername")
         async def rankcheck(interaction: discord.Interaction, player: str):
@@ -149,14 +147,16 @@ class MyBot(discord.Client):
         async def debug(interaction: discord.Interaction):
             await interaction.response.send_message("✅ Der Bot läuft einwandfrei!", ephemeral=True)
 
-        # Sync nur neue, keine alten löschen!
         await self.tree.sync(guild=guild)
 
     async def on_ready(self):
         print(f"✅ Bot ist online als {self.user}")
         channel = self.get_channel(VERIFY_CHANNEL_ID)
         if channel:
-            await channel.purge(limit=5)
+            try:
+                await channel.purge(limit=5)
+            except Exception as e:
+                print(f"⚠️ Fehler beim Purgen: {e}")
             await channel.send(
                 "**🔒 Willkommen! Bitte verifiziere dich mit deinem *The Finals*-Namen!**",
                 view=VerifyButton()
@@ -177,12 +177,6 @@ def get_player_data(player_name):
     return None
 
 keep_alive()
-# Zum Testen: Daten eines Spielers direkt anzeigen
-if __name__ == "__main__":
-    test_name = "ProphecyXeon"  # <-- ändere hier den Namen, falls nötig
-    data = get_player_data(test_name)
-    print("\n📊 Vollständige API-Antwort:")
-    print(json.dumps(data, indent=4))
-
 bot.run(TOKEN)
+
 
