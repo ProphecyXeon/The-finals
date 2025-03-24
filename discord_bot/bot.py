@@ -177,5 +177,12 @@ def get_player_data(player_name):
     return None
 
 keep_alive()
+# Zum Testen: Daten eines Spielers direkt anzeigen
+if __name__ == "__main__":
+    test_name = "ProphecyXeon"  # <-- ändere hier den Namen, falls nötig
+    data = get_player_data(test_name)
+    print("\n📊 Vollständige API-Antwort:")
+    print(json.dumps(data, indent=4))
+
 bot.run(TOKEN)
 
