@@ -4,7 +4,6 @@ import requests
 import re
 import json
 import os
-import asyncio
 from keep_alive import keep_alive
 
 # Konfiguration
@@ -69,9 +68,9 @@ class VerifyModal(discord.ui.Modal, title="Verifizierung"):
             rank_role_id = RANK_ROLE_IDS.get(normalized_league)
             rank_role = guild.get_role(rank_role_id) if rank_role_id else None
 
-            if str(member.id) in verified_users:
+            if str(member.id) in verified_users and verified_users[str(member.id)] != player_name:
                 await interaction.followup.send(
-                    f"✅ Du bist bereits mit dem Namen **{verified_users[str(member.id)]}** verifiziert!",
+                    f"❌ Du bist bereits mit dem Namen **{verified_users[str(member.id)]}** verifiziert!",
                     ephemeral=True
                 )
                 return
@@ -125,11 +124,11 @@ class MyBot(discord.Client):
         guild = discord.Object(id=GUILD_ID)
 
         @self.tree.command(name="rankcheck", description="Zeigt dein aktuelles The Finals Ranking an", guild=guild)
-        @app_commands.describe(player="Dein Spielername")
-        async def rankcheck(interaction: discord.Interaction, player: str):
+        @app_commands.describe(player="Dein Spielername", privat="Nur du kannst die Antwort sehen?")
+        async def rankcheck(interaction: discord.Interaction, player: str, privat: bool = True):
             player_data = get_player_data(player)
             if not player_data:
-                await interaction.response.send_message("❌ Spieler nicht gefunden.", ephemeral=True)
+                await interaction.response.send_message("❌ Spieler nicht gefunden.", ephemeral=privat)
                 return
 
             name = player_data.get("name", "Unbekannt")
@@ -143,7 +142,7 @@ class MyBot(discord.Client):
                 f"💎 **Liga:** {league}\n"
                 f"🔢 **Punkte:** {rating}"
             )
-            await interaction.response.send_message(msg, ephemeral=True)
+            await interaction.response.send_message(msg, ephemeral=privat)
 
         @self.tree.command(name="debug", description="Testet ob der Bot richtig läuft", guild=guild)
         async def debug(interaction: discord.Interaction):
@@ -161,9 +160,6 @@ class MyBot(discord.Client):
                 view=VerifyButton()
             )
 
-        # Starte automatisches Rollen-Update
-        self.loop.create_task(auto_update_roles())
-
 bot = MyBot()
 
 def get_player_data(player_name):
@@ -178,44 +174,7 @@ def get_player_data(player_name):
     print("❌ Kein Spieler gefunden")
     return None
 
-# Hintergrund-Task zum automatischen Rollen-Update
-async def auto_update_roles():
-    await bot.wait_until_ready()
-    guild = bot.get_guild(GUILD_ID)
-    if not guild:
-        print("❌ Guild nicht gefunden.")
-        return
-
-    while not bot.is_closed():
-        print("🔁 Starte automatische Rollenaktualisierung...")
-        for user_id_str, player_name in verified_users.items():
-            member = guild.get_member(int(user_id_str))
-            if not member:
-                continue
-
-            player_data = get_player_data(player_name)
-            if not player_data:
-                print(f"⚠️ Daten für {player_name} nicht gefunden.")
-                continue
-
-            league = player_data.get("league", "Unbekannt")
-            normalized_league = league.split()[0]
-            rank_role_id = RANK_ROLE_IDS.get(normalized_league)
-            rank_role = guild.get_role(rank_role_id) if rank_role_id else None
-
-            current_rank_roles = [role for role in member.roles if role.id in RANK_ROLE_IDS.values()]
-            if current_rank_roles:
-                await member.remove_roles(*current_rank_roles)
-
-            if rank_role:
-                await member.add_roles(rank_role)
-                print(f"🔁 Rolle für {member.display_name} aktualisiert: {rank_role.name}")
-
-        print("✅ Rollenaktualisierung abgeschlossen.")
-        await asyncio.sleep(1800)  # 30 Minuten
-
 keep_alive()
 bot.run(TOKEN)
-
 
 
