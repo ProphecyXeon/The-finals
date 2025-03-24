@@ -123,7 +123,7 @@ class MyBot(discord.Client):
     async def setup_hook(self):
         guild = discord.Object(id=GUILD_ID)
 
-        @self.tree.command(name="rank", description="Zeigt dein aktuelles The Finals Ranking an", guild=guild)
+        @self.tree.command(name="rankcheck", description="Zeigt dein aktuelles The Finals Ranking an", guild=guild)
         @app_commands.describe(player="Dein Spielername")
         async def rank(interaction: discord.Interaction, player: str):
             player_data = get_player_data(player)
