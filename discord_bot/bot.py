@@ -104,7 +104,7 @@ class VerifyModal(discord.ui.Modal, title="Verifizierung"):
 
 class VerifyButton(discord.ui.View):
     def __init__(self):
-        super().__init__()
+        super().__init__(timeout=None)  # View bleibt dauerhaft aktiv
 
     @discord.ui.button(label="Verifizieren", style=discord.ButtonStyle.green)
     async def verify(self, interaction: discord.Interaction, button: discord.ui.Button):
