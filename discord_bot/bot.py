@@ -4,6 +4,7 @@ import requests
 import re
 import json
 import os
+import asyncio
 from keep_alive import keep_alive
 
 # Konfiguration
@@ -17,6 +18,7 @@ RANK_ROLE_IDS = {
     "Diamond": 1351088880715042906,
     "Ruby": 1351089295238103122
 }
+
 VERIFIED_USERS_FILE = "verified_users.json"
 
 def load_verified_users():
@@ -67,9 +69,9 @@ class VerifyModal(discord.ui.Modal, title="Verifizierung"):
             rank_role_id = RANK_ROLE_IDS.get(normalized_league)
             rank_role = guild.get_role(rank_role_id) if rank_role_id else None
 
-            if str(member.id) in verified_users and verified_users[str(member.id)] != player_name:
+            if str(member.id) in verified_users:
                 await interaction.followup.send(
-                    f"❌ Du bist bereits mit dem Namen **{verified_users[str(member.id)]}** verifiziert!",
+                    f"✅ Du bist bereits mit dem Namen **{verified_users[str(member.id)]}** verifiziert!",
                     ephemeral=True
                 )
                 return
@@ -103,7 +105,7 @@ class VerifyModal(discord.ui.Modal, title="Verifizierung"):
 
 class VerifyButton(discord.ui.View):
     def __init__(self):
-        super().__init__(timeout=None)  # wichtig: damit die View dauerhaft aktiv bleibt
+        super().__init__()
 
     @discord.ui.button(label="Verifizieren", style=discord.ButtonStyle.green)
     async def verify(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -153,14 +155,14 @@ class MyBot(discord.Client):
         print(f"✅ Bot ist online als {self.user}")
         channel = self.get_channel(VERIFY_CHANNEL_ID)
         if channel:
-            try:
-                await channel.purge(limit=5)
-            except Exception as e:
-                print(f"⚠️ Fehler beim Purgen: {e}")
+            await channel.purge(limit=5)
             await channel.send(
                 "**🔒 Willkommen! Bitte verifiziere dich mit deinem *The Finals*-Namen!**",
                 view=VerifyButton()
             )
+
+        # Starte automatisches Rollen-Update
+        self.loop.create_task(auto_update_roles())
 
 bot = MyBot()
 
@@ -176,7 +178,44 @@ def get_player_data(player_name):
     print("❌ Kein Spieler gefunden")
     return None
 
+# Hintergrund-Task zum automatischen Rollen-Update
+async def auto_update_roles():
+    await bot.wait_until_ready()
+    guild = bot.get_guild(GUILD_ID)
+    if not guild:
+        print("❌ Guild nicht gefunden.")
+        return
+
+    while not bot.is_closed():
+        print("🔁 Starte automatische Rollenaktualisierung...")
+        for user_id_str, player_name in verified_users.items():
+            member = guild.get_member(int(user_id_str))
+            if not member:
+                continue
+
+            player_data = get_player_data(player_name)
+            if not player_data:
+                print(f"⚠️ Daten für {player_name} nicht gefunden.")
+                continue
+
+            league = player_data.get("league", "Unbekannt")
+            normalized_league = league.split()[0]
+            rank_role_id = RANK_ROLE_IDS.get(normalized_league)
+            rank_role = guild.get_role(rank_role_id) if rank_role_id else None
+
+            current_rank_roles = [role for role in member.roles if role.id in RANK_ROLE_IDS.values()]
+            if current_rank_roles:
+                await member.remove_roles(*current_rank_roles)
+
+            if rank_role:
+                await member.add_roles(rank_role)
+                print(f"🔁 Rolle für {member.display_name} aktualisiert: {rank_role.name}")
+
+        print("✅ Rollenaktualisierung abgeschlossen.")
+        await asyncio.sleep(1800)  # 30 Minuten
+
 keep_alive()
 bot.run(TOKEN)
+
 
 
