@@ -142,7 +142,7 @@ class MyBot(discord.Client):
             await interaction.response.send_message("✅ Der Bot läuft einwandfrei!", ephemeral=True)
 
         # ❌ Alte Slash-Befehle entfernen (nicht awaiten!)
-        self.tree.clear_commands(guild=guild)
+        await self.tree.clear_commands(guild=guild)
 
         # ⏫ Neue Slash-Befehle registrieren
         await self.tree.sync(guild=guild)
