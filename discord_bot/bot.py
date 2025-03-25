@@ -6,12 +6,11 @@ import json
 import os
 from keep_alive import keep_alive
 
+# Konfiguration
 TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = 1351070896441528351
 VERIFY_CHANNEL_ID = 1351657754888110193
-JSON_EDIT_CHANNEL_ID = 1353784055883239434
 VERIFIED_ROLE_ID = 1351658061067976755
-ADMIN_ROLE_ID = 1351089469389930519
 RANK_ROLE_IDS = {
     "Gold": 1351088401880977419,
     "Platinum": 1351088645120987196,
@@ -21,6 +20,7 @@ RANK_ROLE_IDS = {
 
 VERIFIED_USERS_FILE = "verified_users.json"
 
+# JSON laden & speichern
 def load_verified_users():
     if not os.path.exists(VERIFIED_USERS_FILE):
         return {}
@@ -41,6 +41,7 @@ def save_verified_users(data):
 
 verified_users = load_verified_users()
 
+# Modal für Verifizierung
 class VerifyModal(discord.ui.Modal, title="Verifizierung"):
     def __init__(self, user):
         super().__init__()
@@ -55,49 +56,57 @@ class VerifyModal(discord.ui.Modal, title="Verifizierung"):
     async def on_submit(self, interaction: discord.Interaction):
         try:
             await interaction.response.defer(ephemeral=True)
+
             player_name = self.name_input.value.strip()
+            print(f"🔍 Verifizierung gestartet für {player_name} (User: {interaction.user})")
+
             player_data = get_player_data(player_name)
+
             if not player_data:
                 await interaction.followup.send("❌ Kein Spieler mit diesem Namen gefunden.", ephemeral=True)
                 return
 
             guild = interaction.guild
             member = interaction.user
+
             verified_role = guild.get_role(VERIFIED_ROLE_ID)
             league = player_data.get("league", "Unbekannt")
             normalized_league = league.split()[0]
             rank_role_id = RANK_ROLE_IDS.get(normalized_league)
             rank_role = guild.get_role(rank_role_id) if rank_role_id else None
 
-            # Vorherige Rollen entfernen
             current_rank_roles = [role for role in member.roles if role.id in RANK_ROLE_IDS.values()]
             if current_rank_roles:
                 await member.remove_roles(*current_rank_roles)
 
-            # Rollen hinzufügen
             if verified_role:
                 await member.add_roles(verified_role)
             if rank_role:
                 await member.add_roles(rank_role)
-                try:
-                    await member.edit(nick=player_name)
-                except discord.Forbidden:
-                    print("⚠️ Keine Berechtigung zum Ändern des Nicknames.")
-                except Exception as e:
-                    print(f"❌ Fehler beim Nickname ändern: {e}")
 
-            # JSON aktualisieren
+            try:
+                await member.edit(nick=player_name)
+            except discord.Forbidden:
+                print("⚠️ Keine Berechtigung zum Ändern des Nicknames.")
+            except Exception as e:
+                print(f"❌ Fehler beim Nickname ändern: {e}")
+
             verified_users[str(member.id)] = player_name
             save_verified_users(verified_users)
 
             await interaction.followup.send(
-                f"✅ Verifiziert als {player_data['name']} – Liga **{rank_role.name if rank_role else 'Unbekannt'}**.",
+                f"✅ Verifiziert als **{player_data['name']}** – Liga **{rank_role.name if rank_role else 'Unbekannt'}**.",
                 ephemeral=True
             )
-        except Exception as e:
-            print(f"❌ Fehler in VerifyModal: {e}")
-            await interaction.followup.send("❌ Ein Fehler ist aufgetreten.", ephemeral=True)
 
+        except Exception as e:
+            print(f"❌ Fehler in on_submit(): {e}")
+            try:
+                await interaction.followup.send("❌ Ein unerwarteter Fehler ist aufgetreten.", ephemeral=True)
+            except:
+                pass
+
+# Button für den Channel
 class VerifyButton(discord.ui.View):
     def __init__(self):
         super().__init__()
@@ -106,6 +115,7 @@ class VerifyButton(discord.ui.View):
     async def verify(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(VerifyModal(interaction.user))
 
+# Bot mit AppCommands
 intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
@@ -119,9 +129,8 @@ class MyBot(discord.Client):
     async def setup_hook(self):
         guild = discord.Object(id=GUILD_ID)
 
-        # Slash-Befehl /rankcheck
         @self.tree.command(name="rankcheck", description="Zeigt dein aktuelles The Finals Ranking an", guild=guild)
-        @app_commands.describe(player="Dein Spielername", privat="Antwort nur für dich sichtbar?")
+        @app_commands.describe(player="Dein Spielername", privat="Nur du kannst die Antwort sehen?")
         async def rankcheck(interaction: discord.Interaction, player: str, privat: bool = False):
             player_data = get_player_data(player)
             if not player_data:
@@ -141,29 +150,9 @@ class MyBot(discord.Client):
             )
             await interaction.response.send_message(msg, ephemeral=privat)
 
-        # Slash-Befehl /debug
         @self.tree.command(name="debug", description="Testet ob der Bot richtig läuft", guild=guild)
         async def debug(interaction: discord.Interaction):
             await interaction.response.send_message("✅ Der Bot läuft einwandfrei!", ephemeral=True)
-
-        # JSON ansehen
-        @self.tree.command(name="showjson", description="Zeigt die JSON-Datei an", guild=guild)
-        async def showjson(interaction: discord.Interaction):
-            if not interaction.user.get_role(ADMIN_ROLE_ID):
-                await interaction.response.send_message("❌ Keine Berechtigung.", ephemeral=True)
-                return
-            content = json.dumps(verified_users, indent=2)
-            await interaction.response.send_message(f"```json\n{content}\n```", ephemeral=True)
-
-        # JSON löschen
-        @self.tree.command(name="resetjson", description="Löscht die JSON-Datei komplett", guild=guild)
-        async def resetjson(interaction: discord.Interaction):
-            if not interaction.user.get_role(ADMIN_ROLE_ID):
-                await interaction.response.send_message("❌ Keine Berechtigung.", ephemeral=True)
-                return
-            verified_users.clear()
-            save_verified_users(verified_users)
-            await interaction.response.send_message("✅ JSON-Datei wurde zurückgesetzt.", ephemeral=True)
 
         await self.tree.sync(guild=guild)
 
@@ -171,18 +160,13 @@ class MyBot(discord.Client):
         print(f"✅ Bot ist online als {self.user}")
         channel = self.get_channel(VERIFY_CHANNEL_ID)
         if channel:
-            try:
-                await channel.purge(limit=5)
-                await channel.send(
-                    "**🔒 Willkommen! Bitte verifiziere dich mit deinem *The Finals*-Namen!**",
-                    view=VerifyButton()
-                )
-                print("✅ Neue Verifizierungsnachricht gesendet.")
-            except Exception as e:
-                print(f"❌ Fehler im on_ready: {e}")
+            await channel.purge(limit=5)
+            await channel.send(
+                "**🔒 Willkommen! Bitte verifiziere dich mit deinem *The Finals*-Namen!**",
+                view=VerifyButton()
+            )
 
-bot = MyBot()
-
+# API-Funktion
 def get_player_data(player_name):
     clean_name = re.sub(r'#\d+', '', player_name).strip()
     url = f"https://api.the-finals-leaderboard.com/v1/leaderboard/s6/crossplay?name={clean_name}"
@@ -195,5 +179,8 @@ def get_player_data(player_name):
     print("❌ Kein Spieler gefunden")
     return None
 
+# Keep Alive für Railway etc.
 keep_alive()
+bot = MyBot()
 bot.run(TOKEN)
+
