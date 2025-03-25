@@ -2,10 +2,13 @@ import discord
 from discord import app_commands
 import requests
 import re
-import json
 import os
+import sqlite3
+import asyncio
+from discord.ext import tasks
 from keep_alive import keep_alive
 
+# CONFIG
 TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = 1351070896441528351
 VERIFY_CHANNEL_ID = 1351657754888110193
@@ -16,29 +19,62 @@ RANK_ROLE_IDS = {
     "Diamond": 1351088880715042906,
     "Ruby": 1351089295238103122
 }
+ADMIN_ID = 598187531040718900  # Deine Discord-ID
 
-VERIFIED_USERS_FILE = "verified_users.json"
+# Datenbank Setup
+def init_db():
+    conn = sqlite3.connect("verified_users.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            user_id TEXT PRIMARY KEY,
+            player_name TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
 
-def load_verified_users():
-    if not os.path.exists(VERIFIED_USERS_FILE):
-        return {}
-    try:
-        with open(VERIFIED_USERS_FILE, "r", encoding="utf-8") as file:
-            return json.load(file)
-    except json.JSONDecodeError:
-        print("❌ Fehler: verified_users.json ist beschädigt.")
-        return {}
+def save_user(user_id, player_name):
+    conn = sqlite3.connect("verified_users.db")
+    cursor = conn.cursor()
+    cursor.execute("REPLACE INTO users (user_id, player_name) VALUES (?, ?)", (user_id, player_name))
+    conn.commit()
+    conn.close()
 
-def save_verified_users(data):
-    try:
-        with open(VERIFIED_USERS_FILE, "w", encoding="utf-8") as file:
-            json.dump(data, file, indent=4)
-        print("✅ JSON erfolgreich gespeichert:", data)
-    except Exception as e:
-        print(f"❌ Fehler beim Speichern der JSON-Datei: {e}")
+def get_all_users():
+    conn = sqlite3.connect("verified_users.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users")
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
 
-verified_users = load_verified_users()
+def delete_user_by_name(name):
+    conn = sqlite3.connect("verified_users.db")
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM users WHERE player_name = ?", (name,))
+    conn.commit()
+    conn.close()
 
+def clear_users():
+    conn = sqlite3.connect("verified_users.db")
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM users")
+    conn.commit()
+    conn.close()
+
+# API
+def get_player_data(player_name):
+    clean_name = re.sub(r'#\d+', '', player_name).strip()
+    url = f"https://api.the-finals-leaderboard.com/v1/leaderboard/s6/crossplay?name={clean_name}"
+    response = requests.get(url)
+    if response.status_code == 200:
+        data = response.json()
+        if "data" in data and len(data["data"]) > 0:
+            return data["data"][0]
+    return None
+
+# Modal
 class VerifyModal(discord.ui.Modal, title="Verifizierung"):
     def __init__(self, user):
         super().__init__()
@@ -46,54 +82,37 @@ class VerifyModal(discord.ui.Modal, title="Verifizierung"):
 
     name_input = discord.ui.TextInput(
         label="Gib deinen *The Finals*-Namen ein",
-        placeholder="ProphecyXeon",
+        placeholder="z. B. ProphecyXeon",
         required=True
     )
 
     async def on_submit(self, interaction: discord.Interaction):
+        player_name = self.name_input.value.strip()
+        player_data = get_player_data(player_name)
+        if not player_data:
+            await interaction.response.send_message("❌ Kein Spieler gefunden.", ephemeral=True)
+            return
+
+        guild = interaction.guild
+        member = interaction.user
+        league = player_data.get("league", "Unbekannt").split()[0]
+        rank_role_id = RANK_ROLE_IDS.get(league)
+        verified_role = guild.get_role(VERIFIED_ROLE_ID)
+        rank_role = guild.get_role(rank_role_id) if rank_role_id else None
+
+        if verified_role:
+            await member.add_roles(verified_role)
+        if rank_role:
+            await member.add_roles(rank_role)
         try:
-            await interaction.response.defer(ephemeral=True)
-            player_name = self.name_input.value.strip()
-            player_data = get_player_data(player_name)
-            if not player_data:
-                await interaction.followup.send("❌ Kein Spieler mit diesem Namen gefunden.", ephemeral=True)
-                return
+            await member.edit(nick=player_name)
+        except:
+            pass
 
-            guild = interaction.guild
-            member = interaction.user
-            verified_role = guild.get_role(VERIFIED_ROLE_ID)
-            league = player_data.get("league", "Unbekannt")
-            normalized_league = league.split()[0]
-            rank_role_id = RANK_ROLE_IDS.get(normalized_league)
-            rank_role = guild.get_role(rank_role_id) if rank_role_id else None
+        save_user(str(member.id), player_name)
+        await interaction.response.send_message(f"✅ Verifiziert als **{player_name}** – Liga **{league}**", ephemeral=True)
 
-            current_rank_roles = [role for role in member.roles if role.id in RANK_ROLE_IDS.values()]
-            if current_rank_roles:
-                await member.remove_roles(*current_rank_roles)
-
-            if verified_role:
-                await member.add_roles(verified_role)
-
-            if rank_role:
-                await member.add_roles(rank_role)
-                try:
-                    await member.edit(nick=player_name)
-                except discord.Forbidden:
-                    print("⚠️ Keine Berechtigung zum Ändern des Nicknames.")
-                except Exception as e:
-                    print(f"❌ Fehler beim Nickname ändern: {e}")
-
-            verified_users[str(member.id)] = player_name
-            save_verified_users(verified_users)
-
-            await interaction.followup.send(
-                f"✅ Verifiziert als {player_data['name']} – Liga **{rank_role.name if rank_role else 'Unbekannt'}**.",
-                ephemeral=True
-            )
-        except Exception as e:
-            print(f"❌ Fehler in VerifyModal: {e}")
-            await interaction.followup.send("❌ Ein Fehler ist aufgetreten.", ephemeral=True)
-
+# Button View
 class VerifyButton(discord.ui.View):
     def __init__(self):
         super().__init__()
@@ -102,10 +121,10 @@ class VerifyButton(discord.ui.View):
     async def verify(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(VerifyModal(interaction.user))
 
+# Discord Client
 intents = discord.Intents.default()
-intents.message_content = True
-intents.guilds = True
 intents.members = True
+intents.message_content = True
 
 class MyBot(discord.Client):
     def __init__(self):
@@ -115,47 +134,51 @@ class MyBot(discord.Client):
     async def setup_hook(self):
         guild = discord.Object(id=GUILD_ID)
 
-        # /rankcheck
-        @self.tree.command(name="rankcheck", description="Zeigt dein aktuelles The Finals Ranking an", guild=guild)
-        @app_commands.describe(player="Dein Spielername", privat="Nur du kannst die Antwort sehen?")
-        async def rankcheck(interaction: discord.Interaction, player: str, privat: bool = True):
+        @self.tree.command(name="rankcheck", description="Zeigt dein Ranking", guild=guild)
+        @app_commands.describe(player="Dein Spielername")
+        async def rankcheck(interaction: discord.Interaction, player: str):
             player_data = get_player_data(player)
             if not player_data:
-                await interaction.response.send_message("❌ Spieler nicht gefunden.", ephemeral=privat)
+                await interaction.response.send_message("❌ Spieler nicht gefunden.", ephemeral=True)
                 return
-
-            name = player_data.get("name", "Unbekannt")
-            rank = player_data.get("rank", "Unbekannt")
-            league = player_data.get("league", "Unbekannt")
-            rating = player_data.get("rankScore", "Unbekannt")
 
             msg = (
-                f"🔹 **Spieler:** {name}\n"
-                f"🏆 **Rang:** {rank}\n"
-                f"💎 **Liga:** {league}\n"
-                f"🔢 **Punkte:** {rating}"
+                f"🔹 **Spieler:** {player_data['name']}\n"
+                f"🏆 **Rang:** {player_data['rank']}\n"
+                f"💎 **Liga:** {player_data['league']}\n"
+                f"🔢 **Punkte:** {player_data.get('rankScore', 'Unbekannt')}"
             )
-            await interaction.response.send_message(msg, ephemeral=privat)
+            await interaction.response.send_message(msg, ephemeral=False)
 
-        # /removejson
-        @self.tree.command(name="removejson", description="Entfernt einen Nutzer aus der JSON-Datei", guild=guild)
-        @app_commands.describe(user="Wähle den Nutzer, der entfernt werden soll")
-        async def removejson(interaction: discord.Interaction, user: discord.User):
-            if not interaction.user.guild_permissions.administrator:
-                await interaction.response.send_message("❌ Du brauchst Administratorrechte!", ephemeral=True)
+        # Admin-only
+        @self.tree.command(name="list_users", description="Alle verifizierten User", guild=guild)
+        async def list_users(interaction: discord.Interaction):
+            if interaction.user.id != ADMIN_ID:
+                await interaction.response.send_message("Keine Berechtigung!", ephemeral=True)
                 return
+            users = get_all_users()
+            if not users:
+                await interaction.response.send_message("Keine verifizierten User.", ephemeral=True)
+                return
+            message = "\n".join([f"{u[0]} – {u[1]}" for u in users])
+            await interaction.response.send_message(f"📄 Verifizierte:\n{message}", ephemeral=True)
 
-            if str(user.id) in verified_users:
-                del verified_users[str(user.id)]
-                save_verified_users(verified_users)
-                await interaction.response.send_message(f"🗑️ Nutzer **{user.name}** wurde entfernt.", ephemeral=True)
-            else:
-                await interaction.response.send_message(f"⚠️ Nutzer **{user.name}** ist nicht in der JSON-Datei.", ephemeral=True)
+        @self.tree.command(name="remove_user", description="Lösche einen Spieler", guild=guild)
+        @app_commands.describe(player="Spielername")
+        async def remove_user(interaction: discord.Interaction, player: str):
+            if interaction.user.id != ADMIN_ID:
+                await interaction.response.send_message("Keine Berechtigung!", ephemeral=True)
+                return
+            delete_user_by_name(player)
+            await interaction.response.send_message(f"❌ {player} wurde gelöscht.", ephemeral=True)
 
-        # /debug
-        @self.tree.command(name="debug", description="Testet ob der Bot richtig läuft", guild=guild)
-        async def debug(interaction: discord.Interaction):
-            await interaction.response.send_message("✅ Der Bot läuft einwandfrei!", ephemeral=True)
+        @self.tree.command(name="clear_users", description="Löscht alle verifizierten", guild=guild)
+        async def clear_users_cmd(interaction: discord.Interaction):
+            if interaction.user.id != ADMIN_ID:
+                await interaction.response.send_message("Keine Berechtigung!", ephemeral=True)
+                return
+            clear_users()
+            await interaction.response.send_message("⚠️ Alle verifizierten User wurden gelöscht.", ephemeral=True)
 
         await self.tree.sync(guild=guild)
 
@@ -164,25 +187,39 @@ class MyBot(discord.Client):
         channel = self.get_channel(VERIFY_CHANNEL_ID)
         if channel:
             await channel.purge(limit=5)
-            await channel.send(
-                "**🔒 Willkommen! Bitte verifiziere dich mit deinem *The Finals*-Namen!**",
-                view=VerifyButton()
-            )
+            await channel.send("**🔒 Bitte verifiziere dich:**", view=VerifyButton())
+        update_roles.start(self)
 
-bot = MyBot()
+# Hintergrund-Task
+@tasks.loop(minutes=30)
+async def update_roles(bot):
+    print("🔄 Starte automatische Rollen-Aktualisierung...")
+    guild = bot.get_guild(GUILD_ID)
+    users = get_all_users()
+    for user_id, player_name in users:
+        member = guild.get_member(int(user_id))
+        if not member:
+            continue
+        data = get_player_data(player_name)
+        if not data:
+            continue
+        league = data.get("league", "Unbekannt").split()[0]
+        rank_role_id = RANK_ROLE_IDS.get(league)
+        if not rank_role_id:
+            continue
+        rank_role = guild.get_role(rank_role_id)
+        if not rank_role:
+            continue
+        current_roles = [r for r in member.roles if r.id in RANK_ROLE_IDS.values()]
+        if current_roles:
+            await member.remove_roles(*current_roles)
+        await member.add_roles(rank_role)
+        print(f"✅ Rolle von {player_name} aktualisiert zu {rank_role.name}")
 
-def get_player_data(player_name):
-    clean_name = re.sub(r'#\d+', '', player_name).strip()
-    url = f"https://api.the-finals-leaderboard.com/v1/leaderboard/s6/crossplay?name={clean_name}"
-    print(f"🔍 API-Request: {url}")
-    response = requests.get(url)
-    if response.status_code == 200:
-        data = response.json()
-        if "data" in data and len(data["data"]) > 0:
-            return data["data"][0]
-    print("❌ Kein Spieler gefunden")
-    return None
-
+# Starte Bot
+init_db()
 keep_alive()
+bot = MyBot()
 bot.run(TOKEN)
+
 
