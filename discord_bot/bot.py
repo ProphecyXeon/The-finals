@@ -73,13 +73,15 @@ class VerifyModal(discord.ui.Modal, title="Verifizierung"):
 
             if verified_role:
                 await member.add_roles(verified_role)
+
             if rank_role:
                 await member.add_roles(rank_role)
-
-            try:
-                await member.edit(nick=player_name)
-            except discord.Forbidden:
-                print("⚠️ Keine Berechtigung zum Ändern des Nicknames.")
+                try:
+                    await member.edit(nick=player_name)
+                except discord.Forbidden:
+                    print("⚠️ Keine Berechtigung zum Ändern des Nicknames.")
+                except Exception as e:
+                    print(f"❌ Fehler beim Nickname ändern: {e}")
 
             verified_users[str(member.id)] = player_name
             save_verified_users(verified_users)
@@ -113,6 +115,7 @@ class MyBot(discord.Client):
     async def setup_hook(self):
         guild = discord.Object(id=GUILD_ID)
 
+        # /rankcheck
         @self.tree.command(name="rankcheck", description="Zeigt dein aktuelles The Finals Ranking an", guild=guild)
         @app_commands.describe(player="Dein Spielername", privat="Nur du kannst die Antwort sehen?")
         async def rankcheck(interaction: discord.Interaction, player: str, privat: bool = True):
@@ -120,35 +123,37 @@ class MyBot(discord.Client):
             if not player_data:
                 await interaction.response.send_message("❌ Spieler nicht gefunden.", ephemeral=privat)
                 return
+
+            name = player_data.get("name", "Unbekannt")
+            rank = player_data.get("rank", "Unbekannt")
+            league = player_data.get("league", "Unbekannt")
+            rating = player_data.get("rankScore", "Unbekannt")
+
             msg = (
-                f"🔹 **Spieler:** {player_data.get('name', 'Unbekannt')}\n"
-                f"🏆 **Rang:** {player_data.get('rank', 'Unbekannt')}\n"
-                f"💎 **Liga:** {player_data.get('league', 'Unbekannt')}\n"
-                f"🔢 **Punkte:** {player_data.get('rankScore', 'Unbekannt')}"
+                f"🔹 **Spieler:** {name}\n"
+                f"🏆 **Rang:** {rank}\n"
+                f"💎 **Liga:** {league}\n"
+                f"🔢 **Punkte:** {rating}"
             )
             await interaction.response.send_message(msg, ephemeral=privat)
 
-        @self.tree.command(name="showjson", description="Zeigt die verified_users.json Datei", guild=guild)
-        async def showjson(interaction: discord.Interaction):
+        # /removejson
+        @self.tree.command(name="removejson", description="Entfernt einen Nutzer aus der JSON-Datei", guild=guild)
+        @app_commands.describe(user="Wähle den Nutzer, der entfernt werden soll")
+        async def removejson(interaction: discord.Interaction, user: discord.User):
             if not interaction.user.guild_permissions.administrator:
-                await interaction.response.send_message("❌ Keine Berechtigung.", ephemeral=True)
+                await interaction.response.send_message("❌ Du brauchst Administratorrechte!", ephemeral=True)
                 return
-            content = json.dumps(verified_users, indent=2)
-            if len(content) >= 1900:
-                await interaction.response.send_message("⚠️ JSON zu lang für Discord.", ephemeral=True)
+
+            if str(user.id) in verified_users:
+                del verified_users[str(user.id)]
+                save_verified_users(verified_users)
+                await interaction.response.send_message(f"🗑️ Nutzer **{user.name}** wurde entfernt.", ephemeral=True)
             else:
-                await interaction.response.send_message(f"```json\n{content}\n```", ephemeral=True)
+                await interaction.response.send_message(f"⚠️ Nutzer **{user.name}** ist nicht in der JSON-Datei.", ephemeral=True)
 
-        @self.tree.command(name="resetjson", description="Löscht alle verifizierten Nutzer", guild=guild)
-        async def resetjson(interaction: discord.Interaction):
-            if not interaction.user.guild_permissions.administrator:
-                await interaction.response.send_message("❌ Keine Berechtigung.", ephemeral=True)
-                return
-            verified_users.clear()
-            save_verified_users(verified_users)
-            await interaction.response.send_message("🗑️ JSON wurde zurückgesetzt.", ephemeral=True)
-
-        @self.tree.command(name="debug", description="Testet ob der Bot läuft", guild=guild)
+        # /debug
+        @self.tree.command(name="debug", description="Testet ob der Bot richtig läuft", guild=guild)
         async def debug(interaction: discord.Interaction):
             await interaction.response.send_message("✅ Der Bot läuft einwandfrei!", ephemeral=True)
 
