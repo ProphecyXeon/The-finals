@@ -6,7 +6,6 @@ import json
 import os
 from keep_alive import keep_alive
 
-# Konfiguration
 TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = 1351070896441528351
 VERIFY_CHANNEL_ID = 1351657754888110193
@@ -20,7 +19,6 @@ RANK_ROLE_IDS = {
 
 VERIFIED_USERS_FILE = "verified_users.json"
 
-# JSON laden & speichern
 def load_verified_users():
     if not os.path.exists(VERIFIED_USERS_FILE):
         return {}
@@ -41,7 +39,6 @@ def save_verified_users(data):
 
 verified_users = load_verified_users()
 
-# Modal für Verifizierung
 class VerifyModal(discord.ui.Modal, title="Verifizierung"):
     def __init__(self, user):
         super().__init__()
@@ -56,19 +53,14 @@ class VerifyModal(discord.ui.Modal, title="Verifizierung"):
     async def on_submit(self, interaction: discord.Interaction):
         try:
             await interaction.response.defer(ephemeral=True)
-
             player_name = self.name_input.value.strip()
-            print(f"🔍 Verifizierung gestartet für {player_name} (User: {interaction.user})")
-
             player_data = get_player_data(player_name)
-
             if not player_data:
                 await interaction.followup.send("❌ Kein Spieler mit diesem Namen gefunden.", ephemeral=True)
                 return
 
             guild = interaction.guild
             member = interaction.user
-
             verified_role = guild.get_role(VERIFIED_ROLE_ID)
             league = player_data.get("league", "Unbekannt")
             normalized_league = league.split()[0]
@@ -88,25 +80,18 @@ class VerifyModal(discord.ui.Modal, title="Verifizierung"):
                 await member.edit(nick=player_name)
             except discord.Forbidden:
                 print("⚠️ Keine Berechtigung zum Ändern des Nicknames.")
-            except Exception as e:
-                print(f"❌ Fehler beim Nickname ändern: {e}")
 
             verified_users[str(member.id)] = player_name
             save_verified_users(verified_users)
 
             await interaction.followup.send(
-                f"✅ Verifiziert als **{player_data['name']}** – Liga **{rank_role.name if rank_role else 'Unbekannt'}**.",
+                f"✅ Verifiziert als {player_data['name']} – Liga **{rank_role.name if rank_role else 'Unbekannt'}**.",
                 ephemeral=True
             )
-
         except Exception as e:
-            print(f"❌ Fehler in on_submit(): {e}")
-            try:
-                await interaction.followup.send("❌ Ein unerwarteter Fehler ist aufgetreten.", ephemeral=True)
-            except:
-                pass
+            print(f"❌ Fehler in VerifyModal: {e}")
+            await interaction.followup.send("❌ Ein Fehler ist aufgetreten.", ephemeral=True)
 
-# Button für den Channel
 class VerifyButton(discord.ui.View):
     def __init__(self):
         super().__init__()
@@ -115,7 +100,6 @@ class VerifyButton(discord.ui.View):
     async def verify(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(VerifyModal(interaction.user))
 
-# Bot mit AppCommands
 intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
@@ -131,26 +115,40 @@ class MyBot(discord.Client):
 
         @self.tree.command(name="rankcheck", description="Zeigt dein aktuelles The Finals Ranking an", guild=guild)
         @app_commands.describe(player="Dein Spielername", privat="Nur du kannst die Antwort sehen?")
-        async def rankcheck(interaction: discord.Interaction, player: str, privat: bool = False):
+        async def rankcheck(interaction: discord.Interaction, player: str, privat: bool = True):
             player_data = get_player_data(player)
             if not player_data:
                 await interaction.response.send_message("❌ Spieler nicht gefunden.", ephemeral=privat)
                 return
-
-            name = player_data.get("name", "Unbekannt")
-            rank = player_data.get("rank", "Unbekannt")
-            league = player_data.get("league", "Unbekannt")
-            rating = player_data.get("rankScore", "Unbekannt")
-
             msg = (
-                f"🔹 **Spieler:** {name}\n"
-                f"🏆 **Rang:** {rank}\n"
-                f"💎 **Liga:** {league}\n"
-                f"🔢 **Punkte:** {rating}"
+                f"🔹 **Spieler:** {player_data.get('name', 'Unbekannt')}\n"
+                f"🏆 **Rang:** {player_data.get('rank', 'Unbekannt')}\n"
+                f"💎 **Liga:** {player_data.get('league', 'Unbekannt')}\n"
+                f"🔢 **Punkte:** {player_data.get('rankScore', 'Unbekannt')}"
             )
             await interaction.response.send_message(msg, ephemeral=privat)
 
-        @self.tree.command(name="debug", description="Testet ob der Bot richtig läuft", guild=guild)
+        @self.tree.command(name="showjson", description="Zeigt die verified_users.json Datei", guild=guild)
+        async def showjson(interaction: discord.Interaction):
+            if not interaction.user.guild_permissions.administrator:
+                await interaction.response.send_message("❌ Keine Berechtigung.", ephemeral=True)
+                return
+            content = json.dumps(verified_users, indent=2)
+            if len(content) >= 1900:
+                await interaction.response.send_message("⚠️ JSON zu lang für Discord.", ephemeral=True)
+            else:
+                await interaction.response.send_message(f"```json\n{content}\n```", ephemeral=True)
+
+        @self.tree.command(name="resetjson", description="Löscht alle verifizierten Nutzer", guild=guild)
+        async def resetjson(interaction: discord.Interaction):
+            if not interaction.user.guild_permissions.administrator:
+                await interaction.response.send_message("❌ Keine Berechtigung.", ephemeral=True)
+                return
+            verified_users.clear()
+            save_verified_users(verified_users)
+            await interaction.response.send_message("🗑️ JSON wurde zurückgesetzt.", ephemeral=True)
+
+        @self.tree.command(name="debug", description="Testet ob der Bot läuft", guild=guild)
         async def debug(interaction: discord.Interaction):
             await interaction.response.send_message("✅ Der Bot läuft einwandfrei!", ephemeral=True)
 
@@ -166,7 +164,8 @@ class MyBot(discord.Client):
                 view=VerifyButton()
             )
 
-# API-Funktion
+bot = MyBot()
+
 def get_player_data(player_name):
     clean_name = re.sub(r'#\d+', '', player_name).strip()
     url = f"https://api.the-finals-leaderboard.com/v1/leaderboard/s6/crossplay?name={clean_name}"
@@ -179,8 +178,6 @@ def get_player_data(player_name):
     print("❌ Kein Spieler gefunden")
     return None
 
-# Keep Alive für Railway etc.
 keep_alive()
-bot = MyBot()
 bot.run(TOKEN)
 
