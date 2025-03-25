@@ -86,7 +86,7 @@ intents.message_content = True
 
 class VerifyModal(discord.ui.Modal, title="Verifizierung"):
     def __init__(self, user):
-        super().__init__()
+        super().__init__(timeout=None)
         self.user = user
 
     name_input = discord.ui.TextInput(
