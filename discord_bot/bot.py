@@ -143,7 +143,7 @@ class VerifyModal(discord.ui.Modal, title="Verifizierung"):
 
 class VerifyButton(discord.ui.View):
     def __init__(self):
-        super().__init__()
+        super().__init__(timeout=None)  # ✅ BUTTON BLEIBT AKTIV
 
     @discord.ui.button(label="Verifizieren", style=discord.ButtonStyle.green)
     async def verify(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -208,6 +208,9 @@ class MyBot(discord.Client):
                 "**🔒 Verifiziere dich mit deinem *The Finals*-Namen!**",
                 view=VerifyButton()
             )
+            print("📨 Verifizierungsbutton gesendet.")
+        else:
+            print("❌ Verify-Channel nicht gefunden.")
 
 bot = MyBot()
 
@@ -225,7 +228,7 @@ def get_player_data(name):
         print(f"❌ API Fehler: {e}")
     return None
 
-# --- Keep Alive ---
+# --- KEEP ALIVE ---
 app = Flask('')
 
 @app.route('/')
