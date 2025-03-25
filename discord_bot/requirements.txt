@@ -1,3 +1,4 @@
 discord.py
 requests
 flask
+psycopg2-binary
