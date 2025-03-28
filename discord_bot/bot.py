@@ -4,6 +4,7 @@ import requests
 import re
 import os
 import psycopg2
+import asyncio
 from flask import Flask
 from threading import Thread
 
@@ -143,7 +144,7 @@ class VerifyModal(discord.ui.Modal, title="Verifizierung"):
 
 class VerifyButton(discord.ui.View):
     def __init__(self):
-        super().__init__(timeout=None)  # ✅ BUTTON BLEIBT AKTIV
+        super().__init__(timeout=None)
 
     @discord.ui.button(label="Verifizieren", style=discord.ButtonStyle.green)
     async def verify(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -208,11 +209,44 @@ class MyBot(discord.Client):
                 "**🔒 Verifiziere dich mit deinem *The Finals*-Namen!**",
                 view=VerifyButton()
             )
-            print("📨 Verifizierungsbutton gesendet.")
-        else:
-            print("❌ Verify-Channel nicht gefunden.")
 
-bot = MyBot()
+# Hintergrund-Task zur automatischen Rollenaktualisierung
+async def update_roles_periodically(bot):
+    await bot.wait_until_ready()
+    guild = bot.get_guild(GUILD_ID)
+
+    while not bot.is_closed():
+        print("🔁 Starte automatische Rollenüberprüfung...")
+        users = get_all_users()
+        for user_id, player_name in users:
+            member = guild.get_member(user_id)
+            if not member:
+                print(f"⚠️ Mitglied {user_id} nicht gefunden.")
+                continue
+
+            data = get_player_data(player_name)
+            if not data:
+                print(f"❌ API-Daten für {player_name} nicht gefunden.")
+                continue
+
+            league = data.get("league", "Unbekannt").split()[0]
+            new_rank_role_id = RANK_ROLE_IDS.get(league)
+            new_rank_role = guild.get_role(new_rank_role_id) if new_rank_role_id else None
+
+            current_rank_roles = [role for role in member.roles if role.id in RANK_ROLE_IDS.values()]
+            try:
+                if current_rank_roles:
+                    await member.remove_roles(*current_rank_roles)
+                if new_rank_role:
+                    await member.add_roles(new_rank_role)
+                    print(f"✅ Rolle für {member.name} aktualisiert zu {new_rank_role.name}")
+            except discord.Forbidden:
+                print(f"❌ Keine Berechtigung bei {member.name}.")
+            except Exception as e:
+                print(f"❌ Fehler bei {member.name}: {e}")
+
+        print("⏳ Warte 30 Minuten...\n")
+        await asyncio.sleep(1800)
 
 def get_player_data(name):
     clean_name = re.sub(r'#\d+', '', name).strip()
@@ -228,7 +262,7 @@ def get_player_data(name):
         print(f"❌ API Fehler: {e}")
     return None
 
-# --- KEEP ALIVE ---
+# --- Keep Alive ---
 app = Flask('')
 
 @app.route('/')
@@ -245,4 +279,6 @@ def keep_alive():
 # --- MAIN ---
 connect_db()
 keep_alive()
+bot = MyBot()
+bot.loop.create_task(update_roles_periodically(bot))
 bot.run(TOKEN)
