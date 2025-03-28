@@ -4,14 +4,14 @@ import requests
 import re
 import os
 import psycopg2
-import asyncio
 from flask import Flask
 from threading import Thread
+import asyncio
 
 # --- ENV-VARIABLEN ---
 TOKEN = os.getenv("DISCORD_TOKEN")
 DATABASE_URL = os.getenv("DATABASE_URL")
-OWNER_ID = int(os.getenv("OWNER_ID", 0))  # Discord-ID des Admins
+OWNER_ID = int(os.getenv("OWNER_ID", 0))
 
 # --- DISCORD KONFIG ---
 GUILD_ID = 1351070896441528351
@@ -24,7 +24,7 @@ RANK_ROLE_IDS = {
     "Ruby": 1351089295238103122
 }
 
-# --- DB SETUP ---
+# --- DB FUNKTIONEN ---
 def connect_db():
     conn = psycopg2.connect(DATABASE_URL, sslmode='require')
     cur = conn.cursor()
@@ -79,7 +79,7 @@ def get_all_users():
     conn.close()
     return result
 
-# --- DISCORD BOT ---
+# --- DISCORD BOT SETUP ---
 intents = discord.Intents.default()
 intents.guilds = True
 intents.members = True
@@ -166,7 +166,6 @@ class MyBot(discord.Client):
             if not data:
                 await interaction.response.send_message("❌ Spieler nicht gefunden.", ephemeral=True)
                 return
-
             msg = (
                 f"🔹 **Spieler:** {data.get('name')}\n"
                 f"🏆 **Rang:** {data.get('rank')}\n"
@@ -200,6 +199,9 @@ class MyBot(discord.Client):
 
         await self.tree.sync(guild=guild)
 
+        # Start der Hintergrundaufgabe
+        self.loop.create_task(update_roles_periodically(self))
+
     async def on_ready(self):
         print(f"✅ Bot online als {self.user}")
         channel = self.get_channel(VERIFY_CHANNEL_ID)
@@ -210,44 +212,7 @@ class MyBot(discord.Client):
                 view=VerifyButton()
             )
 
-# Hintergrund-Task zur automatischen Rollenaktualisierung
-async def update_roles_periodically(bot):
-    await bot.wait_until_ready()
-    guild = bot.get_guild(GUILD_ID)
-
-    while not bot.is_closed():
-        print("🔁 Starte automatische Rollenüberprüfung...")
-        users = get_all_users()
-        for user_id, player_name in users:
-            member = guild.get_member(user_id)
-            if not member:
-                print(f"⚠️ Mitglied {user_id} nicht gefunden.")
-                continue
-
-            data = get_player_data(player_name)
-            if not data:
-                print(f"❌ API-Daten für {player_name} nicht gefunden.")
-                continue
-
-            league = data.get("league", "Unbekannt").split()[0]
-            new_rank_role_id = RANK_ROLE_IDS.get(league)
-            new_rank_role = guild.get_role(new_rank_role_id) if new_rank_role_id else None
-
-            current_rank_roles = [role for role in member.roles if role.id in RANK_ROLE_IDS.values()]
-            try:
-                if current_rank_roles:
-                    await member.remove_roles(*current_rank_roles)
-                if new_rank_role:
-                    await member.add_roles(new_rank_role)
-                    print(f"✅ Rolle für {member.name} aktualisiert zu {new_rank_role.name}")
-            except discord.Forbidden:
-                print(f"❌ Keine Berechtigung bei {member.name}.")
-            except Exception as e:
-                print(f"❌ Fehler bei {member.name}: {e}")
-
-        print("⏳ Warte 30 Minuten...\n")
-        await asyncio.sleep(1800)
-
+# --- API ---
 def get_player_data(name):
     clean_name = re.sub(r'#\d+', '', name).strip()
     url = f"https://api.the-finals-leaderboard.com/v1/leaderboard/s6/crossplay?name={clean_name}"
@@ -262,7 +227,34 @@ def get_player_data(name):
         print(f"❌ API Fehler: {e}")
     return None
 
-# --- Keep Alive ---
+# --- Hintergrundaufgabe ---
+async def update_roles_periodically(bot):
+    await bot.wait_until_ready()
+    while not bot.is_closed():
+        print("⏳ Starte automatische Rollenüberprüfung...")
+        guild = bot.get_guild(GUILD_ID)
+        if guild:
+            users = get_all_users()
+            for user_id, name in users:
+                member = guild.get_member(user_id)
+                if member:
+                    data = get_player_data(name)
+                    if data:
+                        league = data.get("league", "Unbekannt")
+                        normalized_league = league.split()[0]
+                        role_id = RANK_ROLE_IDS.get(normalized_league)
+                        if role_id:
+                            new_role = guild.get_role(role_id)
+                            current_roles = [r for r in member.roles if r.id in RANK_ROLE_IDS.values()]
+                            try:
+                                await member.remove_roles(*current_roles)
+                                await member.add_roles(new_role)
+                                print(f"✅ Rolle aktualisiert für {name}: {new_role.name}")
+                            except Exception as e:
+                                print(f"⚠️ Fehler beim Aktualisieren von {name}: {e}")
+        await asyncio.sleep(1800)  # 30 Minuten
+
+# --- Flask Server ---
 app = Flask('')
 
 @app.route('/')
@@ -273,12 +265,10 @@ def run():
     app.run(host='0.0.0.0', port=8080)
 
 def keep_alive():
-    t = Thread(target=run)
-    t.start()
+    Thread(target=run).start()
 
 # --- MAIN ---
 connect_db()
 keep_alive()
 bot = MyBot()
-bot.loop.create_task(update_roles_periodically(bot))
 bot.run(TOKEN)
