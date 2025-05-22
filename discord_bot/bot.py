@@ -14,14 +14,14 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 OWNER_ID = int(os.getenv("OWNER_ID", 0))
 
 # --- DISCORD KONFIG ---
-GUILD_ID = 1351070896441528351
-VERIFY_CHANNEL_ID = 1351657754888110193
-VERIFIED_ROLE_ID = 1351658061067976755
+GUILD_ID = 1363971344017915917
+VERIFY_CHANNEL_ID = 1375127926093254676
+VERIFIED_ROLE_ID = 1363971344017915918
 RANK_ROLE_IDS = {
-    "Gold": 1351088401880977419,
-    "Platinum": 1351088645120987196,
-    "Diamond": 1351088880715042906,
-    "Ruby": 1351089295238103122
+    "Gold": 1369288555876188290,
+    "Platinum": 1369288610444087358,
+    "Diamond": 1369288704585371810,
+    "Ruby": 1369288826064994304
 }
 
 # --- DB FUNKTIONEN ---
@@ -167,10 +167,10 @@ class MyBot(discord.Client):
                 await interaction.response.send_message("❌ Spieler nicht gefunden.", ephemeral=True)
                 return
             msg = (
-                f"🔹 **Spieler:** {data.get('name')}\n"
-                f"🏆 **Rang:** {data.get('rank')}\n"
+                f"🔹 **Player:** {data.get('name')}\n"
+                f"🏆 **RanK:** {data.get('rank')}\n"
                 f"💎 **Liga:** {data.get('league')}\n"
-                f"🔢 **Punkte:** {data.get('rankScore')}"
+                f"🔢 **Points:** {data.get('rankScore')}"
             )
             await interaction.response.send_message(msg, ephemeral=False)
 
