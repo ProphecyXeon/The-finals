@@ -169,29 +169,27 @@ class MyBot(discord.Client):
     async def setup_hook(self):
         guild = discord.Object(id=GUILD_ID)
 
-    @self.tree.command(name="rankcheck", description="Zeigt dein The Finals Ranking", guild=guild)
-    @app_commands.describe(player="Optional: Spielername, falls du nicht verifiziert bist")
-    async def rankcheck(interaction: discord.Interaction, player: str = None):
-        # Wenn kein Name angegeben, schaue ob der User verifiziert ist
-        if player is None:
-            player = get_user(interaction.user.id)
-            if not player:
-                await interaction.response.send_message("❌ Du bist nicht verifiziert. Bitte gib einen Spielernamen an.", ephemeral=True)
+        @self.tree.command(name="rankcheck", description="Zeigt dein The Finals Ranking", guild=guild)
+        @app_commands.describe(player="Optional: Spielername, falls du nicht verifiziert bist")
+        async def rankcheck(interaction: discord.Interaction, player: str = None):
+            if player is None:
+                player = get_user(interaction.user.id)
+                if not player:
+                    await interaction.response.send_message("❌ Du bist nicht verifiziert. Bitte gib einen Spielernamen an.", ephemeral=True)
+                    return
+
+            data = get_player_data(player)
+            if not data:
+                await interaction.response.send_message("❌ Spieler nicht gefunden.", ephemeral=True)
                 return
 
-        data = get_player_data(player)
-        if not data:
-            await interaction.response.send_message("❌ Spieler nicht gefunden.", ephemeral=True)
-            return
-
-        msg = (
-            f"🔹 **Player:** {data.get('name')}\n"
-            f"🏆 **Rank:** {data.get('rank')}\n"
-            f"💎 **Liga:** {data.get('league')}\n"
-            f"🔢 **Punkte:** {data.get('rankScore')}"
-        )
-        await interaction.response.send_message(msg, ephemeral=False)
-
+            msg = (
+                f"🔹 **Player:** {data.get('name')}\n"
+                f"🏆 **Rank:** {data.get('rank')}\n"
+                f"💎 **Liga:** {data.get('league')}\n"
+                f"🔢 **Punkte:** {data.get('rankScore')}"
+            )
+            await interaction.response.send_message(msg, ephemeral=False)
 
         @self.tree.command(name="list_users", description="Zeigt alle verifizierten User", guild=guild)
         async def list_users(interaction: discord.Interaction):
@@ -214,6 +212,7 @@ class MyBot(discord.Client):
             count = delete_user_by_name(name)
             await interaction.response.send_message(
                 f"🗑️ {count} Nutzer{' wurde' if count == 1 else ' wurden'} gelöscht." if count else "❌ Kein Eintrag gefunden."
+            )
 
         @self.tree.command(name="delete_all_users", description="Löscht alle verifizierten Nutzer aus der Datenbank", guild=guild)
         async def delete_all_users_command(interaction: discord.Interaction):
@@ -222,11 +221,8 @@ class MyBot(discord.Client):
                 return
             count = delete_all_users()
             await interaction.response.send_message(f"🧹 {count} Nutzer{' wurde' if count == 1 else ' wurden'} gelöscht.")
-            )
 
         await self.tree.sync(guild=guild)
-
-        # Start der Hintergrundaufgabe
         self.loop.create_task(update_roles_periodically(self))
 
     async def on_ready(self):
@@ -279,7 +275,7 @@ async def update_roles_periodically(bot):
                                 print(f"✅ Rolle aktualisiert für {name}: {new_role.name}")
                             except Exception as e:
                                 print(f"⚠️ Fehler beim Aktualisieren von {name}: {e}")
-        await asyncio.sleep(1800)  # 30 Minuten
+        await asyncio.sleep(1800)
 
 # --- Flask Server ---
 app = Flask('')
