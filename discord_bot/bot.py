@@ -60,6 +60,16 @@ def get_user(user_id):
     conn.close()
     return result[0] if result else None
 
+def delete_all_users():
+    conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+    cur = conn.cursor()
+    cur.execute("DELETE FROM verified_users;")
+    conn.commit()
+    deleted = cur.rowcount
+    cur.close()
+    conn.close()
+    return deleted
+
 def delete_user_by_name(name):
     conn = psycopg2.connect(DATABASE_URL, sslmode='require')
     cur = conn.cursor()
@@ -159,20 +169,29 @@ class MyBot(discord.Client):
     async def setup_hook(self):
         guild = discord.Object(id=GUILD_ID)
 
-        @self.tree.command(name="rankcheck", description="Zeigt dein The Finals Ranking", guild=guild)
-        @app_commands.describe(player="Spielername")
-        async def rankcheck(interaction: discord.Interaction, player: str):
-            data = get_player_data(player)
-            if not data:
-                await interaction.response.send_message("❌ Spieler nicht gefunden.", ephemeral=True)
+    @self.tree.command(name="rankcheck", description="Zeigt dein The Finals Ranking", guild=guild)
+    @app_commands.describe(player="Optional: Spielername, falls du nicht verifiziert bist")
+    async def rankcheck(interaction: discord.Interaction, player: str = None):
+        # Wenn kein Name angegeben, schaue ob der User verifiziert ist
+        if player is None:
+            player = get_user(interaction.user.id)
+            if not player:
+                await interaction.response.send_message("❌ Du bist nicht verifiziert. Bitte gib einen Spielernamen an.", ephemeral=True)
                 return
-            msg = (
-                f"🔹 **Player:** {data.get('name')}\n"
-                f"🏆 **RanK:** {data.get('rank')}\n"
-                f"💎 **Liga:** {data.get('league')}\n"
-                f"🔢 **Points:** {data.get('rankScore')}"
-            )
-            await interaction.response.send_message(msg, ephemeral=False)
+
+        data = get_player_data(player)
+        if not data:
+            await interaction.response.send_message("❌ Spieler nicht gefunden.", ephemeral=True)
+            return
+
+        msg = (
+            f"🔹 **Player:** {data.get('name')}\n"
+            f"🏆 **Rank:** {data.get('rank')}\n"
+            f"💎 **Liga:** {data.get('league')}\n"
+            f"🔢 **Punkte:** {data.get('rankScore')}"
+        )
+        await interaction.response.send_message(msg, ephemeral=False)
+
 
         @self.tree.command(name="list_users", description="Zeigt alle verifizierten User", guild=guild)
         async def list_users(interaction: discord.Interaction):
@@ -195,6 +214,14 @@ class MyBot(discord.Client):
             count = delete_user_by_name(name)
             await interaction.response.send_message(
                 f"🗑️ {count} Nutzer{' wurde' if count == 1 else ' wurden'} gelöscht." if count else "❌ Kein Eintrag gefunden."
+
+        @self.tree.command(name="delete_all_users", description="Löscht alle verifizierten Nutzer aus der Datenbank", guild=guild)
+        async def delete_all_users_command(interaction: discord.Interaction):
+            if interaction.user.id != OWNER_ID:
+                await interaction.response.send_message("❌ Keine Berechtigung.", ephemeral=True)
+                return
+            count = delete_all_users()
+            await interaction.response.send_message(f"🧹 {count} Nutzer{' wurde' if count == 1 else ' wurden'} gelöscht.")
             )
 
         await self.tree.sync(guild=guild)
